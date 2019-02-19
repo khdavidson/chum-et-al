@@ -25,7 +25,7 @@ tally.df <- read.csv("2017_MissionRST_Sockeye_20180406_TALLY.csv")
 
 # Rename column headers, reformat data for easier handling in R, create USID. Will be done with pipes for quick running 
 tally.df <- tally.df %>% 
-rename(date = Date,                                             # used this extended way of renaming columns so can see what old column names correspond to in case of error
+  rename(date = Date,                                             # used this extended way of renaming columns so can see what old column names correspond to in case of error
          survey_type = Survey.Type,                                               
          observers = Observers..Initials.Only.,
          daily_sheet = Daily.Sheet..,
@@ -79,8 +79,8 @@ rename(date = Date,                                             # used this exte
   mutate(env_index = paste(paste(gsub("-", "", date)), run, sep="-")) %T>%                         # Create another unique index (env_index) to link TALLY with ENV dataframe. Just date-run
   write.csv("Mission_Sockeye_TALLY_2017_clean.csv", row.names = F)                                 # Export all this as a .csv file. Use row.names=F otherwise R will add unique row entry numbers (not helpful) and your first column will just be numbers
 
-  # Note: will return warnings. This is only because fish counts include NAs, which R doesn't like when considering data as integers. We will
-  # likely remove these NAs later, but for now they are kept to preserve original entries. 
+# Note: will return warnings. This is only because fish counts include NAs, which R doesn't like when considering data as integers. We will
+# likely remove these NAs later, but for now they are kept to preserve original entries. 
 
 
 
@@ -171,7 +171,7 @@ bio.df <- bio.df %>%
   mutate(UFID = paste("2017", ID, sep="-")) %T>%                                                       # Create a unique fish id (UFID) - this is not so important in this dataset as it is only 2017 fish. However, may want to consider assigning UFID's if planning to compare biometrics across years. Add "2017" as prefix for now
   write.csv("Mission_Sockeye_BIO_2017_clean.csv", row.names = F)                                       # Export it all as a .csv
 
-  
+
 
 
 
@@ -186,7 +186,7 @@ env.df <- read.csv("2017_MissionRST_Sockeye_20180406_ENV.csv")
 
 # Rename column headers, reformat data for easier handling in R, create USID and UFID. Will be done with pipes for quick running 
 env.df <- env.df %>% 
-  select(-c(Flow.........m.s., BAY)) %>%
+  select(-c(Flow.........m.s., BAY)) %>%                                           # Dropped empty flow column
   rename(date = Date,                                                              # Used this extended way of renaming columns so can see what old column names correspond to in case of error
          RPM = RPM,
          run = Run..,
@@ -209,6 +209,26 @@ env.df <- env.df %>%
   mutate(run = paste("R", run, sep = "")) %>%                                      # Add "R" before run to help make env_index in next step
   mutate(env_index = paste(paste(gsub("-", "", date)), run, sep="-")) %T>%         # Create a unique index ("env_index") to link to TALLY dataframe. Just date-run
   write.csv("Mission_Sockeye_ENV_2017_clean.csv", row.names = F)                   # Export it all as a .csv
+
+
+
+
+#####################
+#
+# DISCHARGE @ HOPE data cleaning
+#
+#####################
+
+# Read original csv data from excel 
+dis.df <- read.csv("2017_MissionRST_Sockeye_20180406_HOPEDISCHARGE.csv")
+
+# Rename column headers, reformat data for easier handling in R, create USID and UFID. Will be done with pipes for quick running 
+dis.df <- dis.df %>% 
+  rename(date = DATE,                                                              # Used this extended way of renaming columns so can see what old column names correspond to in case of error
+         discharge_m3s = Discharge..m3.s.) %>% 
+  mutate(date = lubridate::dmy(date)) %>%                                          # Convert old dd-mmm-yy to yyyy-mm-dd, makes as.Date for better handling. 
+  mutate(discharge_m3s = as.numeric(discharge_m3s)) %T>%                           # Make discharge numerical
+  write.csv("Mission_Sockeye_HOPEDISCHARGE_2017_clean.csv", row.names = F)         # Export it all as a .csv
 
 
 
