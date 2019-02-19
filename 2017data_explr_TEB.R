@@ -14,14 +14,16 @@ library(lubridate)
 library(grid)
 library(magrittr)
 library(compare)
+library(lme4)
 
-# Read both CLEANED dataframes into R
-tally.df <- read.csv("Mission_Sockeye_TALLY_2017_clean.csv")
-env.df <- read.csv("Mission_Sockeye_ENV_2017_clean.csv")
 
-# Quickly switch back dates to as.Date
-tally.df$date <- as.Date(tally.df$date)
-env.df$date <- as.Date(env.df$date)
+##################################################################################################################################################
+##################################################################################################################################################
+
+#     The following code can be skipped as it deals with merging dataframes - already done, just load file on line 192
+
+##################################################################################################################################################
+##################################################################################################################################################
 
 
 
@@ -31,23 +33,38 @@ env.df$date <- as.Date(env.df$date)
 #
 #####################
 
-########## TALLY DATA
 
-# Select variables of interest for reducted TALLY dataframe - there are many empty or (what appear to be) old columns, so we will just drop them 
-# and focus on the key data and metadata
+
+########## TALLY DATA
+tally.df <- read.csv("Mission_Sockeye_TALLY_2017_clean.csv")
+
+# Quickly just make date as.Date
+tally.df$date <- as.Date(tally.df$date)
+
+# Select variables of interest for reducted TALLY dataframe - focus on the key data and metadata
 pipe_printt = function(tally.abbrv) {print(tally.abbrv); tally.abbrv}          # Function to print dplyr results at end of pipe below.
 tally.abbrv <- tally.df %>% 
   select(c(1:21,27,29,30,32,47,68,69)) %>%                                     # Select column numbers of interest based on column numbers (quicker than typing out all column names, but you could do that too). Omitted other species for now
   pipe_printt()
 
 
-########## ENVIRONMENTAL DATA
 
-# Select variables of interest for reducted TALLY dataframe - there are many empty or (what appear to be) old columns, so we will just drop them 
-# and focus on the key data and metadata
+
+########## ENVIRONMENTAL DATA -- first need to join discharge file to ENV data file as they were separate 
+env.df <- read.csv("Mission_Sockeye_ENV_2017_clean.csv")
+dis.df <- read.csv("Mission_Sockeye_HOPEDISCHARGE_2017_clean.csv")
+
+# Quickly just make date as.Date
+env.df$date <- as.Date(env.df$date)
+dis.df$date <- as.Date(dis.df$date)
+
+# Merge ENV + DISCHARGE 
+ed.merge <- left_join(env.df, dis.df, by="date")
+
+# Select variables of interest for reducted ENV dataframe - focus on the key data and metadata
 pipe_printe = function(env.abbrv) {print(env.abbrv); env.abbrv}          # Function to print dplyr results at end of pipe below.
-env.abbrv <- env.df %>% 
-  select(c(1:19)) %>%                                                    # Select column numbers of interest based on column numbers (quicker than typing out all column names, but you could do that too). All of them for now
+env.abbrv <- ed.merge %>% 
+  select(c(1:20)) %>%                                                    # Select column numbers of interest based on column numbers (quicker than typing out all column names, but you could do that too). All of them for now
   filter(run != "RNA") %>%                                               # Remove a weird NA that was included
   pipe_printe()
 
@@ -57,14 +74,14 @@ env.abbrv <- env.df %>%
 
 #####################
 #
-#  MERGE TALLY + ENV dataframes
+#  MERGE TALLY + ENV(+discharge) dataframes
 #
 #####################
 
 # Goal: merge TALLY and ENV dataframes into one database for 2017 
 
 # Join env.abbrv and tally.abbrv by env_index
-te.merge <- left_join(tally.abbrv, env.abbrv, by="env_index")                # Joining dataframes. Syntax is: left_join(x, y, by="relational key") Will give warnings because is coercing USID from factors into characters, not an issue 
+te.merge <- left_join(tally.abbrv, ed.merge, by="env_index")                # Joining dataframes. Syntax is: left_join(x, y, by="relational key") Will give warnings because is coercing USID from factors into characters, not an issue 
 
 # Clean up merged file for duplicate columns
 # left_join(x,y) creates duplicate columns with suffix .x and .y to identify duplicated columns from x and y (tally.abbrv and bio.abbrv, respectively)
@@ -90,7 +107,7 @@ write.csv(te.merge, "TE_leftjoin.csv", row.names = F)                        # E
 
 #####################
 #
-#  SUPERMERGE (TALLY + ENV) + BIO dataframes
+#  SUPERMERGE (TALLY + ENV(+discharge)) + BIO dataframes
 #
 #####################
 
@@ -146,27 +163,27 @@ write.csv(teb.merge, "TEB_leftjoin.csv", row.names = F)                       # 
 # README FIRST BEFORE GOING FORWARD! 
 
 # A few notes on the data structure of "teb.merge": 
-  # Think of the TALLY, ENV and BIO data as essentially nested: 
-    # Every Tally entry (i.e., sampling event) has at least one ENV entry, but some ENV entries are associated with duplicate Tally entries - 
-      # That is, some sampling events have two Env entries associated with them. These are linked by an Environmental Index "env_index" which 
-      # links sampling events with associated Environmental data. This is a concatenated "date-run" label. 
-    # AS WELL, TALLY does not always have unique fish IDs (UFID(s)) associated with every unique sampling event (USID) (i.e., not every sampling 
-      # event resulted in a fish being sampled), but in BIO, an individual fish (UFID) will always have an associated sampling event (USID). 
-      # Therefore, there are many sampling events, some with associated fish and some without. 
-  # In general, the left_join(x,y,by = "") function takes the left, or x, dataframe (e.g., TALLY+ENV), and expands it out to incorporate all cases 
-      # where there is a matching observation in the right, or y, dataframe (e.g., BIO). We match these observations using, for example, USID 
-      # ('by = "USID"'). 
+# Think of the TALLY, ENV and BIO data as essentially nested: 
+# Every Tally entry (i.e., sampling event) has at least one ENV entry, but some ENV entries are associated with duplicate Tally entries - 
+# That is, some sampling events have two Env entries associated with them. These are linked by an Environmental Index "env_index" which 
+# links sampling events with associated Environmental data. This is a concatenated "date-run" label. 
+# AS WELL, TALLY does not always have unique fish IDs (UFID(s)) associated with every unique sampling event (USID) (i.e., not every sampling 
+# event resulted in a fish being sampled), but in BIO, an individual fish (UFID) will always have an associated sampling event (USID). 
+# Therefore, there are many sampling events, some with associated fish and some without. 
+# In general, the left_join(x,y,by = "") function takes the left, or x, dataframe (e.g., TALLY+ENV), and expands it out to incorporate all cases 
+# where there is a matching observation in the right, or y, dataframe (e.g., BIO). We match these observations using, for example, USID 
+# ('by = "USID"'). 
 
-  # The relational keys are: 
-    # Tally - Environmental: "env_index" = te.merge
-    # te.merge - Biosample: "USID" = teb.merge
+# The relational keys are: 
+# Tally - Environmental: "env_index" = te.merge
+# te.merge - Biosample: "USID" = teb.merge
 
 # The result is one large dataframe where all sampling events (USIDs) are duplicated for the number of fish sampled (UFIDs) and environmental 
-    # observations (env_index). This means if you want to quickly calculate the total number of sockeye smolts on any given day, or for any trap, 
-    # or whatever, 
-    # *** YOU NEED TO USE THE unique() function first *** 
-    # (rather than sum()) - otherwise you will end up with millions of fish as it is summarzing every single entry, potentially those duplicated! 
-    # After you have done that, you can likely use sum(), depending on your grouping structure.
+# observations (env_index). This means if you want to quickly calculate the total number of sockeye smolts on any given day, or for any trap, 
+# or whatever, 
+# *** YOU NEED TO USE THE unique() function first *** 
+# (rather than sum()) - otherwise you will end up with millions of fish as it is summarzing every single entry, potentially those duplicated! 
+# After you have done that, you can likely use sum(), depending on your grouping structure.
 
 
 
@@ -176,6 +193,7 @@ write.csv(teb.merge, "TEB_leftjoin.csv", row.names = F)                       # 
 # Now some data exploration! 
 # Load TALLY + ENVIRONMENTAL + BIOSAMPLE merged superfile!
 teb.merge <- read.csv("TEB_leftjoin.csv")
+teb.merge$date <- as.Date(teb.merge$date)
 
 
 
@@ -213,7 +231,7 @@ teb.merge %>%
   group_by(date) %>%                                                                        # Then group again by date
   summarize(sum=sum(no_SO)) %>%                                                             # Create a new variable ("sum") that sums the total number of sockeye for each date 
   ggplot(aes(x=date, y=sum)) +
-  geom_bar(stat="identity", fill="gray90", colour="black") + 
+  geom_bar(stat="identity", fill="gray70", colour="black") + 
   scale_x_date(date_breaks = "5 day", date_labels = ("%m-%d")) +
   theme_bw() +
   theme(text = element_text(size=15),
@@ -243,7 +261,7 @@ teb.merge %>%
   group_by(date) %>%                                                                                  # Then just group by date
   summarize(nruns = n_distinct(nruns), sum = sum(no_SO), CPUE = (sum/nruns)*10) %>%                   # Create new variables/overwrite old one ("nruns" and "sum") to count the number of runs and total number of sockeye on each date
   ggplot(aes(x=date)) +
-  geom_bar(aes(y=sum), stat="identity", fill="gray90", colour="black") +
+  geom_bar(aes(y=sum), stat="identity", fill="gray70", colour="black") +
   geom_line(aes(y=nruns), size=1) +
   geom_line(aes(y=CPUE), linetype="longdash", size=1) +
   scale_x_date(date_breaks = "5 day", date_labels = ("%m-%d")) +
@@ -277,7 +295,7 @@ p <- teb.merge %>%
   summarize(nruns = n_distinct(nruns), sum = sum(no_SO), CPUE = (sum/nruns)*10)
 
 p1 <- ggplot(p, aes(x=date, y=sum)) +                                                        # Each data series must be its own plot to stack plots. p1: Total # sockeye smolts
-  geom_bar(stat="identity", fill="gray90", colour="black") +
+  geom_bar(stat="identity", fill="gray60", colour="black") +
   scale_x_date(date_breaks = "5 day", date_labels = ("%m-%d")) +
   theme_bw() +
   theme(text = element_text(size=13),
@@ -347,7 +365,7 @@ teb.merge %>%
   group_by(CU_final) %>%                                                                        # Group by remaining CUs
   summarize_at(vars(fork_mm), funs(mean=round(mean(.),2), sd=round(sd(.),2))) %>%               # Create new variables ("mean" and "sd") for fork length summary stats. Note, here we use summarize_at() instead of summarize() because we apply a function ("funs") to round the summary stats to 2 decimal places
   ggplot(aes(x=reorder(CU_final, +mean), y=mean)) +
-  geom_bar(stat="identity", fill="gray90", colour="black") +
+  geom_bar(stat="identity", fill="gray70", colour="black") +
   geom_errorbar(stat="identity", aes(ymin = mean-sd, ymax=mean+sd, width=0.2)) +
   scale_y_continuous(limits=c(0,150), breaks=seq(0,150, by=25)) +
   theme_bw() +
@@ -439,7 +457,8 @@ dates <- teb.merge %>%
   filter(trap_type == "RST") %>% 
   mutate(date = ymd(date)) %>%                                                            # Make "date" as.Date for R
   group_by(CU_final) %>%                                                                  # Grouping by CU
-  summarize(first = min(date), last = max(date))                                          # Create new variables ("first" and "last") that store the first and last migration date of each CU
+  summarize(first = min(date), last = max(date))  %>%                                     # Create new variables ("first" and "last") that store the first and last migration date of each CU
+  print()
 
 migration1 <- teb.merge %>% 
   select(CU_final, date, trap_type, sockeye_smolt_total, UFID) %>% 
@@ -458,7 +477,7 @@ colnames(final)[colnames(final)=="date"] <- "peak_migration_date"               
 colnames(final)[colnames(final)=="peak_n"] <- "peak_migration_number"                 # Rename column for clarity to express "peak_n" is actually the "peak migration number"
 
 
-# step 8: FIGURE OUT 50% MIGRATION DATE  - extract from ggplot? 
+# step 8: 50% migration date
 
 
 
@@ -491,7 +510,7 @@ expansion_date <- sampling.merge.date %>%
   select(USID, CU_final, n_total, n_released, n_sampled, n_assgn, propn, date.x) %>% 
   mutate(n_unsampled_assgn = n_released * propn) %>%                                       # Create a new column "n_unsampled_assgn" that exands the number of unsampled fish by the expansion factor to calculate the number of fish that needs to be added
   group_by(date.x, CU_final) %>%                                                           # Then group by "date.x" and CU  --  Note: "date.x" is a weird artifact label left over from the result of the join in line 401. It refers to the dates where fish were subsampled
-  summarize(exp_n_to_add = sum(n_unsampled_assgn)) %>%                                     # Create a new variable ("exp_n_to_add") which calculates the total number of expanded fish to be added to each CU by each sampling date
+  summarize(exp_n_to_add = sum(n_unsampled_assgn, na.rm=T)) %>%                                     # Create a new variable ("exp_n_to_add") which calculates the total number of expanded fish to be added to each CU by each sampling date
   print()
 
 # Step 4: Count up only the sampled fish for each CU (basically the same as step 1) 
@@ -509,7 +528,8 @@ CU.merge.date <- left_join(CU_date, expansion_date, by=c("CU_final","date"))    
 
 final_date <- CU.merge.date %>% 
   select(CU_final, old_sum, old_propn, exp_n_to_add, date) %>% 
-  mutate(new_sum = old_sum + exp_n_to_add)                                                 # Create a new column ("new_sum") which calculates the new (i.e., expanded) number of fish caught in each CU on each sampling date
+  mutate(new_sum = old_sum + exp_n_to_add) %>%                                            # Create a new column ("new_sum") which calculates the new (i.e., expanded) number of fish caught in each CU on each sampling date
+  print()
 
 # Time out to replace the new NA's with the original numbers (no expansion factor was added so it produced an NA)
 final_date$new_sum <- ifelse(is.na(final_date$new_sum), final_date$old_sum, final_date$new_sum)           # Again, some CUs didn't have expansion factors, so just replace NAs generated with their original abundances
@@ -552,7 +572,7 @@ final_date <- final_date %>%
 # Step 9: Calculate cumulative proportions 
 final_date_cuml <- final_date %>% 
   select(date, CU_final, old_sum, old_propn, exp_n_to_add, new_sum, CU_total) %>% 
-  filter(CU_final %in% CU_interest) %>%                                                # Filter by Top 10 CUs of interest 
+  filter(CU_final %in% CU_10) %>%                                                # Filter by Top 10 CUs of interest 
   group_by(CU_final) %>%                                                               # Group by remaining top 10 CUs
   mutate(cuml_sum = cumsum(new_sum)) %>%                                               # Create a new column ("cuml_sum") that takes the cumulative catch over time for each CU by sampling date 
   mutate(cuml_propn = cuml_sum/CU_total)                                               # Create a new column ("cuml_propn") that calcaultes the cumulate catch proportion for each CU by sampling date
@@ -603,7 +623,16 @@ ggplot(final_date_cuml, aes(x=date, y=cuml_propn, group = CU_final)) +
   ylab("Cumulative proportion of catch") +
   xlab("Date") 
 
-# Extract 50% run timing - TBD ggplot2 can't handle
+# Extract 50% run timing - TBD ggplot2 can't handle :(
+m50 <- final_date_cuml %>% 
+  select(date, CU_final, cuml_propn) %>% 
+  filter(CU_final == "Harrison U/S (L)") %>%                          # Just select Harrison U/S (L)
+  print()                                                             # Visually see that Harrison 50% migration date occurred May 8, 2017
+
+
+
+
+
 final_date_cuml$date <- as.character(final_date_cuml$date)
 final_date_cuml$date <- as.factor(final_date_cuml$date)
 v0.5 <- 0.5
@@ -644,12 +673,98 @@ setdiff(1:2356, teb.merge$ID)                                                   
 
 
 
+# ENV data manipulation 
+teb.merge$water_temp_C <- as.character(teb.merge$water_temp_C)
+teb.merge$water_temp_C <- as.numeric(teb.merge$water_temp_C)
+teb.merge$discharge_m3s <- as.numeric(teb.merge$discharge_m3s)
+teb.merge$water_clarity_in <- as.character(teb.merge$water_clarity_in)
+teb.merge$water_clarity_in <- as.numeric(teb.merge$water_clarity_in)
+
+e<-teb.merge %>% 
+  select(date, env_index, water_temp_C, time, water_clarity_in, discharge_m3s) %>%
+  group_by(date) %>%
+  summarize(mean_temp = mean(water_temp_C, na.rm=T), mean_clarity_cm = (mean(water_clarity_in, na.rm=T)*2.54), discharge=mean(discharge_m3s,na.rm=T)) %>% 
+  print() 
+
+t<-ggplot(e, aes(x=date, y=mean_temp)) +
+  geom_line(col="black", size=1) +
+  #  geom_point(fill="gray70", colour="black", pch=21, size=3) +
+  scale_x_date(date_breaks = "5 day", date_labels = "%m-%d") + 
+  scale_y_continuous(limits=c(2,14), breaks=seq(2,14, by=3), labels=seq(2,14,by=3)) +
+  theme_bw() +
+  theme(plot.margin=margin(t=5,r=5,b=5,l=5),                                                           # Margin spacing order is: top, right, bottom, left
+        panel.background = element_rect(fill = "white"),
+        panel.grid.minor = element_line(colour = "white"),
+        panel.grid.major = element_line(colour = "white"),
+        plot.background = element_rect(fill = "white"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.title.y = element_text(margin=margin(t=0,r=10,b=0,l=10), size=13, face="bold"),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank()) +          
+  ylab(expression(bold(paste("Water temperature ("~degree~C,")", sep=""))))
+c<-ggplot(e, aes(x=date, y=mean_clarity_cm)) +
+  geom_line(col="black", size=0.8) +
+  geom_point(fill="gray60", colour="black", pch=21, size=3) +
+  scale_x_date(date_breaks = "5 day", date_labels = "%m-%d") + 
+  theme_bw() +
+  theme(plot.margin=margin(t=5,r=5,b=5,l=5),                                                           # Margin spacing order is: top, right, bottom, left
+        panel.background = element_rect(fill = "white"),
+        panel.grid.minor = element_line(colour = "white"),
+        panel.grid.major = element_line(colour = "white"),
+        plot.background = element_rect(fill = "white"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.title.y = element_text(margin=margin(t=0,r=10,b=0,l=0), size=13, face="bold"),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank()) +          
+  ylab("Water clarity (cm)") 
+d<-ggplot(e, aes(x=date, y=discharge)) +
+  geom_line(col="black", size=0.8) +
+  geom_point(fill="black", colour="black", pch=21, size=3) +
+  scale_x_date(date_breaks = "5 day", date_labels = "%m-%d") + 
+  theme_bw() +
+  theme(plot.margin=margin(t=5,r=5,b=5,l=5),                                                           # Margin spacing order is: top, right, bottom, left
+        panel.background = element_rect(fill = "white"),
+        panel.grid.minor = element_line(colour = "white"),
+        panel.grid.major = element_line(colour = "white"),
+        plot.background = element_rect(fill = "white"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.title.y = element_text(margin=margin(t=0,r=5,b=0,l=0), size=13, face="bold"),
+        axis.text.x = element_text(angle=45, hjust=1, colour="black", size = 12),
+        axis.title.x = element_text(margin=margin(t=5,r=0,b=0,l=0), size = 13, face= "bold")) +          # Margin spacing order is: top, right, bottom, left
+  ylab(expression(bold(paste("Discharge ("~m^3, "/", s,")", sep="")))) +   
+  xlab("Date")
+grid.draw(rbind(ggplotGrob(t), ggplotGrob(c), ggplotGrob(d), size = "last"))
 
 
 
 
 
 
+
+
+
+
+# Test of CPUE ~ discharge 
+test<-teb.merge %>% 
+  select(date, sockeye_smolt_total, run, trap_type, USID, discharge_m3s) %>%                                
+  filter(trap_type == "RST") %>%                                                                                                     # RST only
+  group_by(date, USID) %>%                                                                                                           # Group by sampling event and date
+  summarize(nruns = unique(run), no_SO = unique(sockeye_smolt_total, na.rm=T), mean_discharge=mean(discharge_m3s, na.rm=T)) %>%      # Create new variables ("nruns", and "no_SO") to summarize the number of runs and the number of sockeye caught in each sampling event on each date
+  group_by(date) %>%                                                                                                                 # Then just group by date
+  summarize(nruns = n_distinct(nruns), sum = sum(no_SO), CPUE = (sum/nruns), mean_discharge=mean(mean_discharge, na.rm=T))           # Calculate daily CPUE and daily discharge      
+
+# Preliminary test of CPUE ~ discharge to see if sign
+plot(test$CPUE ~ test$mean_discharge)
+lm1 <- lm(test$CPUE ~ test$mean_discharge)                                    # Create linear model to extract residuals 
+r1 <- resid(lm1)                                                              # Extract residuals of linear model to assess for normality, variance
+plot(r1)                                                                      # Plot residuals to look at distribution 
+qqnorm(r1)                                                                    # QQ-plot to help assess normality
+qqline(r1)                                                                    # Add reference line to QQ-plot
+hist(r1)                                                                      # Histogram of residuals to assess distribution
+
+# Data are non-normal so use GLM to accommodate     
+glm1<-glm((CPUE+1) ~ mean_discharge, data=test, family = Gamma(link="inverse"))            # GLM: add 1 to CPUE to remove 0s (not allowed in Gamma distribution)
+summary(glm1)                                                                              # Print results of GLM
 
 
 
