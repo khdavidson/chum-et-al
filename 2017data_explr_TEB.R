@@ -632,17 +632,17 @@ m50 <- final_date_cuml %>%
 
 
 
+######### scrap working code
+        final_date_cuml$date <- as.character(final_date_cuml$date)
+        final_date_cuml$date <- as.factor(final_date_cuml$date)
+        v0.5 <- 0.5
+        f1 <- approxfun(final_date_cuml$date, final_date_cuml$cuml_propn)
+        optimize(function(t0) abs(f1(t0) - v0.5), interval = range(as.Date(final_date_cuml$date)))
+        
+        conc.est <- approx(x = as.numeric(final_date_cuml$date),
+                           y = final_date_cuml$cuml_propn, xout=0.5)$cuml_propn
 
-final_date_cuml$date <- as.character(final_date_cuml$date)
-final_date_cuml$date <- as.factor(final_date_cuml$date)
-v0.5 <- 0.5
-f1 <- approxfun(final_date_cuml$date, final_date_cuml$cuml_propn)
-optimize(function(t0) abs(f1(t0) - v0.5), interval = range(as.Date(final_date_cuml$date)))
-
-conc.est <- approx(x = as.numeric(final_date_cuml$date),
-                   y = final_date_cuml$cuml_propn, xout=0.5)$cuml_propn
-
-
+######################################
 
 
 
