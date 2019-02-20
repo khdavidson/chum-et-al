@@ -647,7 +647,7 @@ m50 <- final_date_cuml %>%
 
 
 # Re-make "LENGTH - TRAP TABLES" (Table 7 in 2017): Length and trap 
-teb.merge$UFID <- as.character(teb.merge$UFID)                                                      # As in lines 313-314
+teb.merge$UFID <- as.character(teb.merge$UFID)                                                       # As in lines 313-314
 teb.merge$UFID <- ifelse(is.na(teb.merge$UFID), "n/a", teb.merge$UFID)                               # As in lines 313-314 - Could do at beginning in retrospect
 
 teb.merge %>% 
@@ -658,11 +658,11 @@ teb.merge %>%
 
 # Note numbers are a bit off for RST when comparing to the Excel spreadsheet - check if any UFID's repeated       
 n_occur <- data.frame(table(teb.merge$UFID))                                                 # Evaluate the number of occurrences for UFID
-n_occur[n_occur$Freq >1,]                                                                   # Determine if any UFIDs have an occurrence frequency >1 (i.e., occur more than once) - Fish 2017-769 occurrs twice    
+n_occur[n_occur$Freq >1,]                                                                    # Determine if any UFIDs have an occurrence frequency >1 (i.e., occur more than once) - Fish 2017-769 occurrs twice    
 
 # Have checked for doubles, now check that the UFIDs are consequtive and in sequence (i.e., were any ID numbers skipped)
-teb.merge$ID <- as.numeric(teb.merge$ID)                                                      # Just consider the ID column as we need a numeric sequence (not a character or factor) - and make it numeric
-teb.merge$ID <- ifelse(is.na(teb.merge$ID), "n/a", teb.merge$ID)                               # Replace NAs with text "n/a" so doesn't throw error (R doesn't like numerical sequences with NAs)
+teb.merge$ID <- as.numeric(teb.merge$ID)                                                     # Just consider the ID column as we need a numeric sequence (not a character or factor) - and make it numeric
+teb.merge$ID <- ifelse(is.na(teb.merge$ID), "n/a", teb.merge$ID)                             # Replace NAs with text "n/a" so doesn't throw error (R doesn't like numerical sequences with NAs)
 
 setdiff(1:2356, teb.merge$ID)                                                                # Fish 1830 is missing - in BIO sheet is entered as being from May10 run2, bay6, but there is no entry for that on tally sheet, just May10, run2, BAY11 therefore was dropped upon merging the BIO and TALLY dataframes and we lost that fish entry. 
 
