@@ -38,28 +38,43 @@ CPUE_discharge <- data %>%
 
 
 ggplot(CPUE_discharge, aes(x=date)) +
-  geom_bar(aes(y=total_SO, fill="Total number of sockeye"), stat="identity", colour="gray70", alpha=0.2) +
-  geom_line(aes(y=fish_run, group=1, colour="Total sockeye/runs (*10)", linetype="Total sockeye/runs (*10)"), size=1) +
-  geom_line(aes(y=fish_m3s, group=2, colour="Total sockeye/m3/s (*1000)", linetype = "Total sockeye/m3/s (*1000)"), size=1) + 
-  scale_colour_manual("", values=c("Total sockeye/runs (*10)" = "gray20", "Total sockeye/m3/s (*1000)" = "black")) +
+  geom_bar(aes(y=total_SO, fill="Total number of smolts"), stat="identity", colour="gray30", alpha=0.4) +
+  geom_line(aes(y=fish_run, group=1, 
+                colour="CPUE: Total smolts/runs (*10)", 
+                linetype="CPUE: Total smolts/runs (*10)",
+                size="CPUE: Total smolts/runs (*10)")) +
+  geom_line(aes(y=fish_m3s, group=2, 
+                colour="CPUE: Total smolts/m3/s (*1000)", 
+                linetype = "CPUE: Total smolts/m3/s (*1000)",
+                size="CPUE: Total smolts/m3/s (*1000)")) + 
   scale_fill_manual("", values="gray60") +
-  scale_linetype_manual("", values = c("Total sockeye/runs (*10)" = 3, 
-                                       "Total sockeye/m3/s (*1000)" = 1)) +
+  scale_colour_manual("", values=c("CPUE: Total smolts/runs (*10)" = "black", "CPUE: Total smolts/m3/s (*1000)" = "black")) +
+  scale_linetype_manual("", values = c("CPUE: Total smolts/runs (*10)" = 3, "CPUE: Total smolts/m3/s (*1000)" = 1)) +
+  scale_size_manual("", values = c("CPUE: Total smolts/runs (*10)"=1.2, "CPUE: Total smolts/m3/s (*1000)"=1.5)) +
   scale_x_date(date_breaks = "5 day", date_labels = "%m-%d") + 
-  theme_bw()+
+  scale_y_continuous(limits=c(0,500), breaks=seq(0,500,by=100), labels = seq(0,500, by=100),
+                     sec.axis = sec_axis(~., name = "CPUE")) +
+  theme_bw() +
   theme(text = element_text(colour="black", size=12),
         plot.margin=margin(t=15,r=10,b=2,l=2),
         panel.background = element_rect(fill = "white"),
         panel.grid.minor = element_line(colour = "white"),
         panel.grid.major = element_line(colour = "white"),
         plot.background = element_rect(fill = "white"),
-        axis.title.y = element_text(margin=margin(t=0,r=7,b=0,l=0), face="bold", size=12),
-        axis.text.y = element_text(colour="black", size=10),
-        axis.title.x = element_text(margin=margin(t=7,r=0,b=2,l=0), face="bold", size=12),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=10),
-        legend.text = element_text(size=12),
-        legend.position = c(0.11,0.8)) +
-  ylab("Daily catch") +
+        axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=15), angle=90, size=30),
+        legend.text = element_text(size=25),
+        legend.position = c(0.76,0.89),
+        legend.background = element_blank(),
+        legend.box.background = element_rect(colour = "black"),
+        legend.spacing.y = unit(-3.5, "mm"), 
+        legend.key.height = unit(2, "line"),
+        legend.key.width = unit(2, "line")) +
+  guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch")) +
+  ylab("Total number of smolts") +
   xlab("Date")
   
 #  geom_point(aes(y=fish_m3s), size=2, pch=21, fill="black",  colour="black") + 
