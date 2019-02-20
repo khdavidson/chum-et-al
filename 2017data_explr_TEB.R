@@ -205,7 +205,7 @@ teb.merge %>%
   group_by(trap_type) %>%                                                                  # Then group by trap type
   summarize(sum=sum(no_SO, na.rm=T)) %>%                                                   # Create a new variable ("sum") that sums the total number of sockeye in each trap
   print() %>%                                                                              # Print a table of the summarized results
-  ggplot(aes(x=trap_type, y=sum)) +                                                      # Pipe right into ggplot for quick visual results
+  ggplot(aes(x=trap_type, y=sum)) +                                                        # Pipe right into ggplot for quick visual results
   geom_bar(stat="identity", fill="gray80", colour="black") +
   theme_bw() +
   theme(panel.background = element_rect(fill = "white"),
