@@ -260,26 +260,26 @@ teb.merge %>%
   summarize(nruns = unique(run), no_SO = unique(sockeye_smolt_total, na.rm=T)) %>%                    # Create new variables ("nruns", and "no_SO") to summarize the number of runs and the number of sockeye caught in each sampling event on each date
   group_by(date) %>%                                                                                  # Then just group by date
   summarize(nruns = n_distinct(nruns), sum = sum(no_SO), CPUE = (sum/nruns)*10) %>%                   # Create new variables/overwrite old one ("nruns" and "sum") to count the number of runs and total number of sockeye on each date
-  ggplot(aes(x=date)) +
-  geom_bar(aes(y=sum), stat="identity", fill="gray70", colour="black") +
-  geom_line(aes(y=nruns), size=1) +
-  geom_line(aes(y=CPUE), linetype="longdash", size=1) +
-  scale_x_date(date_breaks = "5 day", date_labels = ("%m-%d")) +
-  scale_y_continuous(limits = c(0,500),
-                     sec.axis = sec_axis(~., name = "CPUE (*10) and \n Number of runs")) +
-  theme_bw() +
-  theme(plot.margin=margin(t=5,r=5,b=5,l=5),                                                        # Margin spacing order is: top, right, bottom, left
-        panel.background = element_rect(fill = "white"),
-        panel.grid.minor = element_line(colour = "white"),
-        panel.grid.major = element_line(colour = "white"),
-        plot.background = element_rect(fill = "white"),
-        axis.text.y = element_text(colour = "black", size = 12,),
-        axis.title.y = element_text(margin=margin(t=0,r=10,b=0,l=0), size=15, face="bold"),
-        axis.text.x = element_text(angle = 45, hjust = 1, colour="black", size = 12),
-        axis.title.x = element_text(margin=margin(t=5,r=0,b=0,l=0), size = 15, face="bold"),        # Margin spacing order is: top, right, bottom, left
-        axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=7), size=15, angle=90)) +
-  ylab("Number of sockeye smolts") +
-  xlab("Date")
+    ggplot(aes(x=date)) +
+      geom_bar(aes(y=sum), stat="identity", fill="gray70", colour="black") +
+      geom_line(aes(y=nruns), size=1) +
+      geom_line(aes(y=CPUE), linetype="longdash", size=1) +
+      scale_x_date(date_breaks = "5 day", date_labels = ("%m-%d")) +
+      scale_y_continuous(limits = c(0,500),
+                         sec.axis = sec_axis(~., name = "CPUE (*10) and \n Number of runs")) +
+      theme_bw() +
+      theme(plot.margin=margin(t=5,r=5,b=5,l=5),                                                        # Margin spacing order is: top, right, bottom, left
+            panel.background = element_rect(fill = "white"),
+            panel.grid.minor = element_line(colour = "white"),
+            panel.grid.major = element_line(colour = "white"),
+            plot.background = element_rect(fill = "white"),
+            axis.text.y = element_text(colour = "black", size = 12,),
+            axis.title.y = element_text(margin=margin(t=0,r=10,b=0,l=0), size=15, face="bold"),
+            axis.text.x = element_text(angle = 45, hjust = 1, colour="black", size = 12),
+            axis.title.x = element_text(margin=margin(t=5,r=0,b=0,l=0), size = 15, face="bold"),        # Margin spacing order is: top, right, bottom, left
+            axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=7), size=15, angle=90)) +
+      ylab("Number of sockeye smolts") +
+      xlab("Date")
 
 
 
