@@ -163,27 +163,27 @@ write.csv(teb.merge, "TEB_leftjoin.csv", row.names = F)                       # 
 # README FIRST BEFORE GOING FORWARD! 
 
 # A few notes on the data structure of "teb.merge": 
-# Think of the TALLY, ENV and BIO data as essentially nested: 
-# Every Tally entry (i.e., sampling event) has at least one ENV entry, but some ENV entries are associated with duplicate Tally entries - 
-# That is, some sampling events have two Env entries associated with them. These are linked by an Environmental Index "env_index" which 
-# links sampling events with associated Environmental data. This is a concatenated "date-run" label. 
-# AS WELL, TALLY does not always have unique fish IDs (UFID(s)) associated with every unique sampling event (USID) (i.e., not every sampling 
-# event resulted in a fish being sampled), but in BIO, an individual fish (UFID) will always have an associated sampling event (USID). 
-# Therefore, there are many sampling events, some with associated fish and some without. 
-# In general, the left_join(x,y,by = "") function takes the left, or x, dataframe (e.g., TALLY+ENV), and expands it out to incorporate all cases 
-# where there is a matching observation in the right, or y, dataframe (e.g., BIO). We match these observations using, for example, USID 
-# ('by = "USID"'). 
+  # Think of the TALLY, ENV and BIO data as essentially nested: 
+    # Every Tally entry (i.e., sampling event) has at least one ENV entry, but some ENV entries are associated with duplicate Tally entries - 
+    # That is, some sampling events have two Env entries associated with them. These are linked by an Environmental Index "env_index" which 
+    # links sampling events with associated Environmental data. This is a concatenated "date-run" label. 
+    # AS WELL, TALLY does not always have unique fish IDs (UFID(s)) associated with every unique sampling event (USID) (i.e., not every sampling 
+    # event resulted in a fish being sampled), but in BIO, an individual fish (UFID) will always have an associated sampling event (USID). 
+    # Therefore, there are many sampling events, some with associated fish and some without. 
+  # In general, the left_join(x,y,by = "") function takes the left, or x, dataframe (e.g., TALLY+ENV), and expands it out to incorporate all cases 
+    # where there is a matching observation in the right, or y, dataframe (e.g., BIO). We match these observations using, for example, USID 
+    # ('by = "USID"'). 
 
-# The relational keys are: 
-# Tally - Environmental: "env_index" = te.merge
-# te.merge - Biosample: "USID" = teb.merge
+  # The relational keys are: 
+    # Tally - Environmental: "env_index" = te.merge
+    # te.merge - Biosample: "USID" = teb.merge
 
-# The result is one large dataframe where all sampling events (USIDs) are duplicated for the number of fish sampled (UFIDs) and environmental 
-# observations (env_index). This means if you want to quickly calculate the total number of sockeye smolts on any given day, or for any trap, 
-# or whatever, 
-# *** YOU NEED TO USE THE unique() function first *** 
-# (rather than sum()) - otherwise you will end up with millions of fish as it is summarzing every single entry, potentially those duplicated! 
-# After you have done that, you can likely use sum(), depending on your grouping structure.
+  # The result is one large dataframe where all sampling events (USIDs) are duplicated for the number of fish sampled (UFIDs) and environmental 
+    # observations (env_index). This means if you want to quickly calculate the total number of sockeye smolts on any given day, or for any trap, 
+    # or whatever, 
+    # *** YOU NEED TO USE THE unique() function first *** 
+    # (rather than sum()) - otherwise you will end up with millions of fish as it is summarzing every single entry, potentially those duplicated! 
+  # After you have done that, you can likely use sum(), depending on your grouping structure.
 
 
 
