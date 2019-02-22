@@ -18,6 +18,17 @@ library(stringr)
 library(grid)
 library(gridExtra)
 
+# Need to make a new column for run time (sec) - the old one was derived from Basecamp tracks and might not be actually "true" - instead
+# convert the rounded run times (min) to represent run times in seconds. A coarse estimate, given the resolution is at the minute-level,
+# but probably more representative of actual sampling time. 
+data <- data %>%
+  select(everything()) %>%
+  mutate_at(vars(c(17)), funs(as.character)) %>%
+  mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
+  mutate_at(vars(c(17)), funs(as.numeric)) %>%
+  mutate(run_time_der = run_time*60)
+
+
 ################################################################################################################################################
 ################################################################################################################################################
 
@@ -28,11 +39,13 @@ library(gridExtra)
 ################################################################################################################################################
 
 
-# METHOD 1.1: Daily catch/daily discharge (scale: day)
+#                                      METHOD 1.1: Daily catch/daily discharge (scale: day)
+
+
 
 # Calibrate daily total catch by daily discharge @ Hope
 CPUE_discharge <- data %>%
-  select(sockeye_smolt_total, discharge_m3s, date, USID, run, run_time) %>% 
+  select(sockeye_smolt_total, discharge_m3s, date, USID, run) %>% 
   filter(sockeye_smolt_total != "NR", run_time == "0:15") %>%                                                                         # Remove the messy NR entries and select only 15 minute runs
   group_by(date, USID, discharge_m3s) %>%                                                                                             # Group by date, sampling event and discharge
   summarize(unique_SO = unique(sockeye_smolt_total, na.rm=T), unique_runs=unique(run)) %>%                                            # Create new variables to select the total number of sockeye in each sampling event and the number of runs
@@ -98,17 +111,14 @@ ggplot(CPUE_discharge, aes(x=date)) +
 
 # Calibrate daily total catch by daily discharge @ Hope - ACCOUNT FOR SAMPLING EFFORT (TOTAL RUN TIME in sec)
 CPUE_discharge_run <- data %>%
-  select(sockeye_smolt_total, discharge_m3s, date, USID, run, run_time) %>% 
-  transform(run_time=str_replace(run_time,"0:","")) %>%
-  mutate_at(vars(c(5)), funs(as.numeric)) %>%
+  select(sockeye_smolt_total, discharge_m3s, date, USID, run, run_time_der) %>% 
   filter(sockeye_smolt_total != "NR") %>%                                                                        
-  group_by(date, USID, discharge_m3s, run, run_time) %>%                                        
+  group_by(date, USID, discharge_m3s, run, run_time_der) %>%                                        
   summarize(unique_SO = unique(sockeye_smolt_total, na.rm=T)) %>%
   group_by(date, run, discharge_m3s) %>%
-  summarize(total_SO = sum(unique_SO), unique_time = unique(run_time)) %>%
-  mutate_at(vars(c(5)), funs(as.numeric)) %>%
+  summarize(total_SO = sum(unique_SO), unique_time = unique(run_time_der)) %>%
   group_by(date) %>% 
-  summarize(total_SO = sum(total_SO), total_time = sum(unique_time*60), 
+  summarize(total_SO = sum(total_SO), total_time = sum(unique_time), 
             discharge = mean(discharge_m3s, na.rm=T), runs = n_distinct(run)) %>%
   mutate(fish_run = total_SO/runs*10,
          fish_m3s = total_SO/discharge*1000,
@@ -116,8 +126,6 @@ CPUE_discharge_run <- data %>%
   print()
 
 # Plot dyplyr results (Figure 2)
-CPUE_discharge_run$date <- as.Date(as.character(CPUE_discharge_run$date))
-
 ggplot(CPUE_discharge_run, aes(x=date)) +
   geom_line(aes(y=fish_run, group=1, 
                 colour="CPUE: Total smolts/runs", 
@@ -170,159 +178,231 @@ ggplot(CPUE_discharge_run, aes(x=date)) +
 ################################################################################################################################################
 
 
-# METHOD 2: Standardizing by bay flow (scale: bay, 3 levels)
+#                                    METHOD 2: Standardizing by Bay flow (scale: Bay, date-run level)
 
 
+####################
+#
+# BUT FIRST
+# SOME EXPLORATORY RELATIONSHIPS to understand how current velocity changes with bay, date, time, etc. 
+# 
+####################
 
-# FIRST SOME EXPLORATORY RELATIONSHIPS
-# Extract current speed ~ bay, date, time
+# Extract current velocity ~ date + time of day (used start time, arbitrary) + Bay
+  # But to consider time of day (as related to tides), need to create a new column that is a 'date-time' combination
+data <- data %>% 
+  mutate(date_time = paste(paste(gsub("-", "", date)), paste(paste(gsub(":","", NEW_set_start))), sep="-"))
+  
 flow <- data %>% 
-  select(date, USID, bay, run, current_speed_mps, NEW_set_start) %>% 
+  select(date, USID, bay, run, current_speed_mps, NEW_set_start, date_time) %>% 
   filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                    # 135 entries lost due to no GPS data
   group_by(date, USID, run, bay, NEW_set_start) %>% 
-  summarize(unq_flow = unique(current_speed_mps), unq_start = unique(NEW_set_start)) %>% 
-  group_by(date, bay, unq_start) %>% 
+  summarize(unq_flow = unique(current_speed_mps), unq_start = unique(NEW_set_start), unq_dt = unique(date_time)) %>% 
+  group_by(date, bay, unq_start,  unq_dt) %>% 
   summarize(flow = unique(unq_flow)) %>%
+  ungroup() %>%
   mutate_at(vars(c(3)), funs(as.character)) %>%
   mutate(unq_start = paste(gsub(":", "", unq_start))) %>%
   mutate_at(vars(c(3)), funs(as.numeric)) %>%
   print()
-
-    # Test: flow ~ bay + date + time of day (based on start time) 
-    lm1 <- lm(log(flow) ~ unq_start, data=flow)
-    r1 <- resid(lm1)
-    plot(r1)
-    hist(r1)
-    qqnorm(r1)
-    qqline(r1)
-    
-    lm2 <- lm(log10(flow) ~ bay, data=flow)
-    r2 <- resid(lm2)
-    plot(r2)
-    hist(r2)
-    qqnorm(r2)
-    qqline(r2)
-    a2 <- aov(log10(flow) ~ bay, data=flow)
-    summary(a2)
-    TukeyHSD(a2)
-    
-    lm3 <- lm(flow ~ date*bay, data=flow)
-    r3 <- resid(lm3)
-    plot(lm3)
-    plot(r3)
-    hist(r3)
-    qqnorm(r3)
-    qqline(r3)
-
-
 
 # Afterthought - also get current speed ~ discharge 
 flow_dis <- data %>% 
   select(date, discharge_m3s, current_speed_mps, bay) %>% 
   group_by(date, bay) %>% 
   summarize(discharge = mean(discharge_m3s, na.rm=T), current = mean(current_speed_mps, na.rm=T))
+
+        # Test: flow ~ bay + date + time of day (based on start time) 
+        lm1 <- lm(log(flow) ~ unq_start, data=flow)
+        r1 <- resid(lm1)
+        plot(r1)
+        hist(r1)
+        qqnorm(r1)
+        qqline(r1)
+        
+        lm2 <- lm(log10(flow) ~ bay, data=flow)
+        r2 <- resid(lm2)
+        plot(r2)
+        hist(r2)
+        qqnorm(r2)
+        qqline(r2)
+        a2 <- aov(log10(flow) ~ bay, data=flow)
+        summary(a2)
+        TukeyHSD(a2)
+        
+        lm3 <- lm(flow ~ date*bay, data=flow)
+        r3 <- resid(lm3)
+        plot(lm3)
+        plot(r3)
+        hist(r3)
+        qqnorm(r3)
+        qqline(r3)
+
     
-    
-    # Plot current speed ~ date, current speed ~ time of day, current speed ~ discharge (FIGURE 3)
-    date<-ggplot(flow, aes(fill=bay)) + 
-      geom_point(aes(x=date, y=flow), pch=21, size=5) +
-      scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "7 day", date_labels = "%m-%d") +
-      scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+  # FIGURE 3: Plot current speed ~ date, current speed ~ time of day, current speed ~ discharge 
+  # Fig 3A
+  date<-ggplot(flow, aes(fill=bay)) + 
+    geom_point(aes(x=date, y=flow), pch=21, size=5) +
+    scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "7 day", date_labels = "%m-%d") +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    theme_bw() +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=10,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=0,r=5,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
+          axis.text.x = element_text(colour="black", size=25),
+          legend.title = element_blank(),
+          legend.text = element_text(size=25),
+          legend.position = c(0.1,0.7),
+          legend.background = element_blank(),
+          legend.box.background = element_rect(colour = "black"))+
+        xlab("Date") +
+        ylab("")
+  # Fig 3B    
+  start<-ggplot(flow, aes(fill=bay)) + 
+    geom_point(aes(x=unq_start, y=flow), pch=21, size=5) +
+    scale_x_continuous(breaks=seq(600, 1530,150), labels=seq(600, 1530,150), limits=c(600, 1530)) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    theme_bw() +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=10,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
+          axis.text.x = element_text(colour="black", size=25),
+          legend.position="none") +
+    ylab("Current velocity (m/s)") +
+    xlab("Time of day (24 hr)")
+  #Fig 3C
+  datetime<-ggplot(flow, aes(fill=bay)) +                           # Not super informative - trends obviously more driven by discharge than tide apparently
+    geom_point(aes(x=unq_dt, y=flow), pch=21, size=5) +
+    #scale_x_discrete(breaks=seq("20170423-607", "20170614-1013",150), 
+                      #labels=seq(600, 1530,150), limits=c(600, 1530)) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    theme_bw() +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=10,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
+          axis.text.x = element_text(colour="black", size=25),
+          legend.position="none") +
+    ylab("Current velocity (m/s)") +
+    xlab("Time of day (24 hr)")
+  # Fig 3D
+  dcharge<-ggplot(flow_dis, aes(x=discharge, y=current, fill=bay)) +
+    geom_smooth(aes(colour=bay)) +
+    geom_point(pch=21, size=5) +
+    scale_x_continuous(limits=c(1600,10000), breaks=seq(1600,10000, by=2000), labels=seq(1600,10000,by=2000)) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
                         name="",
                         breaks=c("B2", "B6", "B11"),
                         labels=c("Bay 2", "Bay 6", "Bay 11")) +
-      theme_bw() +
-      theme(text = element_text(colour="black", size=12),
-            plot.margin=margin(t=10,r=10,b=2,l=2),
-            panel.background = element_rect(fill = "white", colour = "black", size=2),
-            panel.grid.minor = element_line(colour = "transparent"),
-            panel.grid.major = element_line(colour = "transparent"),
-            plot.background = element_rect(fill = "transparent"),
-            axis.ticks = element_line(size=1.2),
-            axis.ticks.length = unit(0.5, "line"),
-            axis.title.y = element_text(margin=margin(t=0,r=5,b=0,l=5), face="bold", size=30),
-            axis.text.y = element_text(colour="black", size=25),
-            axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
-            axis.text.x = element_text(colour="black", size=25),
-            legend.title = element_blank(),
-            legend.text = element_text(size=25),
-            legend.position = c(0.1,0.7),
-            legend.background = element_blank(),
-            legend.box.background = element_rect(colour = "black"))+
-          #  legend.spacing.y = unit(-3.5, "mm"), 
-          #  legend.key.height = unit(2, "line"),
-           # legend.key.width = unit(2, "line")) +
-      xlab("Date") +
-      ylab("")
+    theme_bw() +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=10,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=0,r=5,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_text(margin=margin(t=10,r=0,b=5,l=0), face="bold", size=30),
+          axis.text.x = element_text(colour="black", size=25),
+          legend.text = element_text(size=25),
+          legend.position = "none") +
+    xlab(expression(bold(paste("Discharge (m"^3, "/", s,")", sep="")))) +   
+    ylab("")
     
-    start<-ggplot(flow, aes(fill=bay)) + 
-      geom_point(aes(x=unq_start, y=flow), pch=21, size=5) +
-      scale_x_continuous(breaks=seq(600, 1530,150), labels=seq(600,1530,150), limits=c(600,1530)) +
-      scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                        name="",
-                        breaks=c("B2", "B6", "B11"),
-                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
-      theme_bw() +
-      theme(text = element_text(colour="black", size=12),
-            plot.margin=margin(t=10,r=10,b=2,l=2),
-            panel.background = element_rect(fill = "white", colour = "black", size=2),
-            panel.grid.minor = element_line(colour = "transparent"),
-            panel.grid.major = element_line(colour = "transparent"),
-            plot.background = element_rect(fill = "transparent"),
-            axis.ticks = element_line(size=1.2),
-            axis.ticks.length = unit(0.5, "line"),
-            axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=5), face="bold", size=30),
-            axis.text.y = element_text(colour="black", size=25),
-            axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
-            axis.text.x = element_text(colour="black", size=25),
-            legend.position="none") +
-      ylab("Current velocity (m/s)") +
-      xlab("Time of day (24 hr)")
+  grid.newpage()
+  grid.draw(rbind(ggplotGrob(date), ggplotGrob(start), ggplotGrob(dcharge), size="last"))
+
+  
+# Download and extract tidal data from EC to examine Bay current velocity ~ tide height
+sealvl <- read.csv("7654-01-APR-2017_slev2.csv")                # Sea level data for April at New Westminster (Stn # 7654) 
+
+# Split Date and Time into 2 columns to compare with sampling data easier 
+sealvl <- sealvl %>% 
+  rename(sea_level_m = SLEV.metres.) %>%
+  separate(Obs_date, into = c("date", "time"), sep = " (?=[^ ]+$)") %>%
+  mutate(date = lubridate::dmy(date)) %>%
+  mutate(time = paste(gsub(":","", time))) %>%
+  mutate_at(vars(c(2)), funs(as.numeric)) %>%
+  filter(date > "2017-04-02") %>%
+  filter(between(time, 609, 1244)) %>%
+  print()
+  
+
+  
+  
+  
+  
+  
+  
+  
+  
+
+# Given these plots, we can see that current velocity varies considerably by: 
+    # Bay: Bay 6 current velocity is significantly higher than Bays 2 and 11. But Bays 2 and 11 do not differ significantly in current velocity
+    # Date: Current velocity increases over time, due to increasing discharge. This increase is not proportional for all Bays: Bay 6 current velocity increases much more than Bays 2 and 11 over time.
+    # Discharge: As above, increasing discharge over time increases current velocity in Bay 6 much more than Bays 2 and 11
+    # Time of day: Although this graph doesn't show a clear affect of time of day on current velocity, I need to combine date-time events as this change is linked to tidal cycles. Or, gather tide date. TBD.
     
-    dcharge<-ggplot(flow_dis, aes(x=discharge, y=current, fill=bay)) +
-      geom_smooth(aes(colour=bay)) +
-      geom_point(pch=21, size=5) +
-      scale_x_continuous(limits=c(1600,10000), breaks=seq(1600,10000, by=2000), labels=seq(1600,10000,by=2000)) +
-      scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                        name="",
-                        breaks=c("B2", "B6", "B11"),
-                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
-      scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                        name="",
-                        breaks=c("B2", "B6", "B11"),
-                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
-      theme_bw() +
-      theme(text = element_text(colour="black", size=12),
-            plot.margin=margin(t=10,r=10,b=2,l=2),
-            panel.background = element_rect(fill = "white", colour = "black", size=2),
-            panel.grid.minor = element_line(colour = "transparent"),
-            panel.grid.major = element_line(colour = "transparent"),
-            plot.background = element_rect(fill = "transparent"),
-            axis.ticks = element_line(size=1.2),
-            axis.ticks.length = unit(0.5, "line"),
-            axis.title.y = element_text(margin=margin(t=0,r=5,b=0,l=5), face="bold", size=30),
-            axis.text.y = element_text(colour="black", size=25),
-            axis.title.x = element_text(margin=margin(t=10,r=0,b=5,l=0), face="bold", size=30),
-            axis.text.x = element_text(colour="black", size=25),
-            legend.text = element_text(size=25),
-            legend.position = "none") +
-      xlab(expression(bold(paste("Discharge (m"^3, "/", s,")", sep="")))) +   
-      ylab("")
+######
+#
+# / END exploratory analysis
+#
+######
     
-    grid.newpage()
-    grid.draw(rbind(ggplotGrob(date), ggplotGrob(start), ggplotGrob(dcharge), size="last"))
 
-
-
-### 
-
-# Calculate current speed for each date-run event
-  # Current varies:
-    # Intra-annually             (~Date, due to discharge)
-    # Over the course of a day   (~Date-time, due to tide)
-    # Horizontally               (~Date-run, due to shoreline effects)
-  # This is at the run scale so dont need to account for sampling time (unless scaled up to daily CPUE)
+####################
+#
+# NEXT,
+# CALIBRATE CATCH BY VELOCITY - Calculate velocity for each date-run event 
+#     RECALL, current varies:
+#       Intra-annually                (~Date, due to discharge)
+#       Over the course of a day      (~Time, due to tide)
+#       Over the course of date-time  (~Date-time, due to tide)
+#       Horizontally                  (~Date-run, due to shoreline effects)
+#     This is at the run scale so dont need to account for sampling time (unless scaled up to daily CPUE)
+# 
+####################  
     
+# Extract current velocity and # sockeye to calculate # FISH/M/S
 bay_flow <- data %>% 
   select(date, USID, run, bay, current_speed_mps, NEW_set_start, sockeye_smolt_total) %>% 
   filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                      # 135 entries lost due to no GPS data
@@ -336,78 +416,143 @@ bay_flow <- data %>%
   print()
   
 
-
-# Plot original total catch and fish/m/s (FIGURE 4)
-bay_flow$bay <- factor(bay_flow$bay, levels=c("B2", "B6", "B11"), ordered=T)
-
-total<-ggplot(bay_flow, aes(colour=bay, fill=bay)) +
-  geom_vline(aes(xintercept = date), col="gray60") +
-  geom_bar(stat="identity", aes(x=date, y=sum_total), position="dodge") +
-  scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
-  scale_y_continuous(limits=c(0,400)) +
-  scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                    name="",
-                    breaks=c("B2", "B6", "B11"),
-                    labels=c("Bay 2", "Bay 6", "Bay 11")) +
-  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                    name="",
-                    breaks=c("B2", "B6", "B11"),
-                    labels=c("Bay 2", "Bay 6", "Bay 11")) +
-  theme(text = element_text(colour="black", size=12),
-        plot.margin=margin(t=10,r=10,b=2,l=2),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y = element_text(margin=margin(t=30,r=5,b=0,l=5), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
-        legend.title = element_blank(),
-        legend.text = element_text(size=25),
-        legend.position = c(0.1,0.7),
-        legend.background = element_blank(),
-        legend.box.background = element_rect(colour = "black")) +
-  ylab("Total smolts")
-
-fish_ms<-ggplot(bay_flow, aes(colour=bay,fill=bay, group=bay)) +
-  geom_vline(aes(xintercept = date), col="gray60") +
-  geom_bar(stat="identity", aes(x=date, y=sum_fish_ms), position="dodge") +
-  scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
-  scale_y_continuous(limits=c(0,400)) +
-  scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                    name="",
-                    breaks=c("B2", "B6", "B11"),
-                    labels=c("Bay 2", "Bay 6", "Bay 11")) +
-  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+  # FIGURE 4: Plot original total catch and fish/m/s  
+  bay_flow$bay <- factor(bay_flow$bay, levels=c("B2", "B6", "B11"), ordered=T)
+  # Fig 4A
+  total<-ggplot(bay_flow, aes(colour=bay, fill=bay)) +
+    geom_vline(aes(xintercept = date), col="gray60") +
+    geom_bar(stat="identity", aes(x=date, y=sum_total), position="dodge") +
+    scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
+    scale_y_continuous(limits=c(0,400)) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
                       name="",
                       breaks=c("B2", "B6", "B11"),
                       labels=c("Bay 2", "Bay 6", "Bay 11")) +
-  theme(text = element_text(colour="black", size=12),
-        plot.margin=margin(t=10,r=10,b=2,l=2),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y = element_text(margin=margin(t=0,r=5,b=0,l=5), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
-        axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
-        legend.position = "none") +
-  xlab("Date") +
-  ylab("Total smolts/m/s")
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=10,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=50,r=25,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_blank(),
+          axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
+          legend.title = element_blank(),
+          legend.text = element_text(size=25),
+          legend.position = c(0.1,0.7),
+          legend.background = element_blank(),
+          legend.box.background = element_rect(colour = "black")) +
+    ylab("Total \n smolts")
+  # Fig 4B
+  fish_ms<-ggplot(bay_flow, aes(colour=bay,fill=bay, group=bay)) +
+    geom_vline(aes(xintercept = date), col="gray60") +
+    geom_bar(stat="identity", aes(x=date, y=sum_fish_ms), position="dodge") +
+    scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
+    scale_y_continuous(limits=c(0,400)) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                        name="",
+                        breaks=c("B2", "B6", "B11"),
+                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=10,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=0,r=25,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_blank(),
+          axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
+          legend.position = "none") +
+    ylab("Total \n smolts/m/s")
 
-grid.newpage()
-grid.draw(rbind(ggplotGrob(total), ggplotGrob(fish_ms), size="last"))
-grid.arrange(total, fish_ms, ncol=2)
 
+# Also consider sampling time lengths - Standardizing by bay flow, accounting for run length (sec)
+# Extract variables as above, as well as sampling time (sec) 
+bay_flow_sec <- data %>% 
+  select(date, USID, run, bay, current_speed_mps, NEW_set_start, sockeye_smolt_total, run_time_der) %>% 
+  filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                      # 135 entries lost due to no GPS data
+  group_by(date, USID, run, bay, NEW_set_start) %>% 
+  summarize(current = unique(current_speed_mps), catch = unique(sockeye_smolt_total, na.rm=T), unq_sec = unique(run_time_der)) %>% 
+  group_by(date, run, bay, NEW_set_start) %>%
+  summarize(current = unique(current), total = sum(catch, na.rm=T), run_sec = unique(unq_sec)) %>% 
+  mutate(fish_ms = total/current) %>%
+  mutate(fish_m = fish_ms/run_sec) %>% 
+  group_by(date, bay) %>% 
+  summarize(sum_total = sum(total), sum_fish_ms=sum(fish_ms), sum_fish_m = sum(fish_m)*100) %>% 
+  print()
 
+  #Fig 4C
+  fish_m<-ggplot(bay_flow_sec, aes(colour=bay,fill=bay, group=bay)) +
+    geom_vline(aes(xintercept = date), col="gray60") +
+    geom_bar(stat="identity", aes(x=date, y=sum_fish_m), position="dodge") +
+    scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
+    scale_y_continuous(limits=c(0,50)) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                        name="",
+                        breaks=c("B2", "B6", "B11"),
+                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=10,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=0,r=25,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
+          axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
+          legend.position = "none") +
+    xlab("Date") +
+    ylab("Total \n smolts/m")
+  
+  # Fig 4ABC draw
+  grid.newpage()
+  grid.draw(rbind(ggplotGrob(total), ggplotGrob(fish_ms), ggplotGrob(fish_m), size="last"))
+  grid.arrange(total, fish_ms, ncol=2)
+    # Looking at Figure 4, dramatic changes occur when accounting for run time - suddenly the catch in Bay 11 is highest, 
+      # which doesn't seem correct. -- I don't think it is correct. For now should just deal with 15 minute runs only for simplicity 
 
-
+    # Are there significant differences in run time length among bays? 
+    bay_runs <- data %>% 
+      select(date, USID, run, bay, current_speed_mps, NEW_set_start, sockeye_smolt_total, run_time_der) %>% 
+      filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                      # 135 entries lost due to no GPS data
+      group_by(date, USID, run, bay, NEW_set_start) %>% 
+      summarize(current = unique(current_speed_mps), catch = unique(sockeye_smolt_total, na.rm=T), unq_sec = unique(run_time_der)) %>% 
+      group_by(date, run, bay, NEW_set_start) %>%
+      summarize(current = unique(current), total = sum(catch, na.rm=T), run_sec = unique(unq_sec)) %>%
+      group_by(bay) %>% 
+    print()
+    
+    lm1<-lm(bay_runs$run_sec ~ bay_runs$bay)
+    r1<-resid(lm1)
+    plot(r1)
+    hist(r1)
+    qqnorm(r1)
+    qqline(r1)
+    
+    a1 <- aov(bay_runs$run_sec ~ bay_runs$bay)
+    summary(lm1)
+    TukeyHSD(a1)
 
 
 
