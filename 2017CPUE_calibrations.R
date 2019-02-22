@@ -190,26 +190,31 @@ flow <- data %>%
 
     # Test: flow ~ bay + date + time of day (based on start time) 
     lm1 <- lm(log(flow) ~ unq_start, data=flow)
-    lm2 <- lm(flow ~ bay, data=flow)
-    lm3 <- lm(log(flow) ~ date, data=flow)
     r1 <- resid(lm1)
-    r2 <- resid(lm2)
-    r3 <- resid(lm3)
     plot(r1)
-    plot(r2)
-    plot(r3)
     hist(r1)
-    hist(r2)
-    hist(r3)
     qqnorm(r1)
     qqline(r1)
+    
+    lm2 <- lm(log10(flow) ~ bay, data=flow)
+    r2 <- resid(lm2)
+    plot(r2)
+    hist(r2)
     qqnorm(r2)
     qqline(r2)
+    a2 <- aov(log10(flow) ~ bay, data=flow)
+    summary(a2)
+    TukeyHSD(a2)
+    
+    lm3 <- lm(flow ~ date*bay, data=flow)
+    r3 <- resid(lm3)
+    plot(lm3)
+    plot(r3)
+    hist(r3)
     qqnorm(r3)
     qqline(r3)
-    
-    a1 <- aov(flow ~ unq_start*bay + bay + date*bay, data=flow)
-    summary(a1)
+
+
 
 # Afterthought - also get current speed ~ discharge 
 flow_dis <- data %>% 
@@ -271,13 +276,18 @@ flow_dis <- data %>%
             axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
             axis.text.x = element_text(colour="black", size=25),
             legend.position="none") +
-      ylab("Current speed (m/s)") +
+      ylab("Current velocity (m/s)") +
       xlab("Time of day (24 hr)")
     
     dcharge<-ggplot(flow_dis, aes(x=discharge, y=current, fill=bay)) +
+      geom_smooth(aes(colour=bay)) +
       geom_point(pch=21, size=5) +
       scale_x_continuous(limits=c(1600,10000), breaks=seq(1600,10000, by=2000), labels=seq(1600,10000,by=2000)) +
       scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                        name="",
+                        breaks=c("B2", "B6", "B11"),
+                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
+      scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
                         name="",
                         breaks=c("B2", "B6", "B11"),
                         labels=c("Bay 2", "Bay 6", "Bay 11")) +
@@ -296,7 +306,7 @@ flow_dis <- data %>%
             axis.text.x = element_text(colour="black", size=25),
             legend.text = element_text(size=25),
             legend.position = "none") +
-      xlab(expression(bold(paste("Discharge ("~m^3, "/", s,")", sep="")))) +   
+      xlab(expression(bold(paste("Discharge (m"^3, "/", s,")", sep="")))) +   
       ylab("")
     
     grid.newpage()
@@ -320,19 +330,79 @@ bay_flow <- data %>%
   summarize(current = unique(current_speed_mps), catch = unique(sockeye_smolt_total, na.rm=T)) %>% 
   group_by(date, run, bay, NEW_set_start) %>%
   summarize(current = unique(current), total = sum(catch, na.rm=T)) %>% 
-  mutate(fish_ms = total/current)
+  mutate(fish_ms = total/current) %>%
+  group_by(date, bay) %>% 
+  summarize(sum_total = sum(total), sum_fish_ms=sum(fish_ms)) %>% 
+  print()
+  
 
-total<-ggplot(bay_flow, aes(fill=bay)) +
-  geom_bar(stat="identity", aes(x=date, y=total), position="dodge") +
-  scale_y_continuous(limits=c(0,200)) +
-  theme(legend.position="none")
 
-fish_ms<-ggplot(bay_flow, aes(fill=bay)) +
-  geom_bar(stat="identity", aes(x=date, y=fish_ms), position="dodge") +
-  scale_y_continuous(limits=c(0,100)) +
-  theme(legend.title=element_blank(),
-        legend.position = c(0.8,0.8))
+# Plot original total catch and fish/m/s
+bay_flow$bay <- factor(bay_flow$bay, levels=c("B2", "B6", "B11"), ordered=T)
 
+total<-ggplot(bay_flow, aes(colour=bay, fill=bay)) +
+  geom_vline(aes(xintercept = date), col="gray60") +
+  geom_bar(stat="identity", aes(x=date, y=sum_total), position="dodge") +
+  scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
+  scale_y_continuous(limits=c(0,400)) +
+  scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                    name="",
+                    breaks=c("B2", "B6", "B11"),
+                    labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                    name="",
+                    breaks=c("B2", "B6", "B11"),
+                    labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  theme(text = element_text(colour="black", size=12),
+        plot.margin=margin(t=10,r=10,b=2,l=2),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y = element_text(margin=margin(t=30,r=5,b=0,l=5), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
+        legend.title = element_blank(),
+        legend.text = element_text(size=25),
+        legend.position = c(0.1,0.7),
+        legend.background = element_blank(),
+        legend.box.background = element_rect(colour = "black")) +
+  ylab("Total smolts")
+
+fish_ms<-ggplot(bay_flow, aes(colour=bay,fill=bay, group=bay)) +
+  geom_vline(aes(xintercept = date), col="gray60") +
+  geom_bar(stat="identity", aes(x=date, y=sum_fish_ms), position="dodge") +
+  scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
+  scale_y_continuous(limits=c(0,400)) +
+  scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                    name="",
+                    breaks=c("B2", "B6", "B11"),
+                    labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
+                      name="",
+                      breaks=c("B2", "B6", "B11"),
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  theme(text = element_text(colour="black", size=12),
+        plot.margin=margin(t=10,r=10,b=2,l=2),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y = element_text(margin=margin(t=0,r=5,b=0,l=5), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
+        axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
+        legend.position = "none") +
+  xlab("Date") +
+  ylab("Total smolts/m/s")
+
+grid.newpage()
+grid.draw(rbind(ggplotGrob(total), ggplotGrob(fish_ms), size="last"))
 grid.arrange(total, fish_ms, ncol=2)
 
 
