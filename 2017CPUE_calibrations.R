@@ -223,7 +223,7 @@ flow_dis <- data %>%
   summarize(discharge = mean(discharge_m3s, na.rm=T), current = mean(current_speed_mps, na.rm=T))
     
     
-    # Plot current speed ~ date, current speed ~ time of day, current speed ~ discharge
+    # Plot current speed ~ date, current speed ~ time of day, current speed ~ discharge (FIGURE 3)
     date<-ggplot(flow, aes(fill=bay)) + 
       geom_point(aes(x=date, y=flow), pch=21, size=5) +
       scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "7 day", date_labels = "%m-%d") +
@@ -337,7 +337,7 @@ bay_flow <- data %>%
   
 
 
-# Plot original total catch and fish/m/s
+# Plot original total catch and fish/m/s (FIGURE 4)
 bay_flow$bay <- factor(bay_flow$bay, levels=c("B2", "B6", "B11"), ordered=T)
 
 total<-ggplot(bay_flow, aes(colour=bay, fill=bay)) +
