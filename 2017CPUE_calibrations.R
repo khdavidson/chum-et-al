@@ -190,20 +190,17 @@ ggplot(CPUE_discharge_run, aes(x=date)) +
 
 # Extract current velocity ~ date + time of day (used start time, arbitrary) + Bay
   # But to consider time of day (as related to tides), need to create a new column that is a 'date-time' combination
-data <- data %>% 
-  mutate(date_time = paste(paste(gsub("-", "", date)), paste(paste(gsub(":","", NEW_set_start))), sep="-"))
-  
 flow <- data %>% 
-  select(date, USID, bay, run, current_speed_mps, NEW_set_start, date_time) %>% 
-  filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                    # 135 entries lost due to no GPS data
-  group_by(date, USID, run, bay, NEW_set_start) %>% 
-  summarize(unq_flow = unique(current_speed_mps), unq_start = unique(NEW_set_start), unq_dt = unique(date_time)) %>% 
-  group_by(date, bay, unq_start,  unq_dt) %>% 
+  mutate(datetime = paste(date, NEW_set_start, sep=" ")) %>%
+  mutate(datetime = lubridate::ymd_hm(datetime)) %>%
+  separate(datetime, into=c("date", "time"), sep = " (?=[^ ]+$)") %>% 
+  mutate(datetime = paste(date, time, sep=" ")) %>%
+  select(date, time, datetime, USID, bay, run, current_speed_mps) %>% 
+  filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%   
+  group_by(date, USID, run, bay, time, datetime) %>% 
+  summarize(unq_flow = unique(current_speed_mps)) %>% 
+  group_by(date, bay, time, run, datetime) %>% 
   summarize(flow = unique(unq_flow)) %>%
-  ungroup() %>%
-  mutate_at(vars(c(3)), funs(as.character)) %>%
-  mutate(unq_start = paste(gsub(":", "", unq_start))) %>%
-  mutate_at(vars(c(3)), funs(as.numeric)) %>%
   print()
 
 # Afterthought - also get current speed ~ discharge 
@@ -243,11 +240,8 @@ flow_dis <- data %>%
   # Fig 3A
   date<-ggplot(flow, aes(fill=bay)) + 
     geom_point(aes(x=date, y=flow), pch=21, size=5) +
-    scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "7 day", date_labels = "%m-%d") +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "7 day", date_labels = "%h %d") +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -269,13 +263,10 @@ flow_dis <- data %>%
         xlab("Date") +
         ylab("")
   # Fig 3B    
+  flow$time <- as.POSIXct(strptime(flow$time, format="%k:%M:%S"))
   start<-ggplot(flow, aes(fill=bay)) + 
-    geom_point(aes(x=unq_start, y=flow), pch=21, size=5) +
-    scale_x_continuous(breaks=seq(600, 1530,150), labels=seq(600, 1530,150), limits=c(600, 1530)) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    geom_point(aes(x=time, y=flow), pch=21, size=5) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -294,13 +285,8 @@ flow_dis <- data %>%
     xlab("Time of day (24 hr)")
   #Fig 3C
   datetime<-ggplot(flow, aes(fill=bay)) +                           # Not super informative - trends obviously more driven by discharge than tide apparently
-    geom_point(aes(x=unq_dt, y=flow), pch=21, size=5) +
-    #scale_x_discrete(breaks=seq("20170423-607", "20170614-1013",150), 
-                      #labels=seq(600, 1530,150), limits=c(600, 1530)) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    geom_point(aes(x=datetime, y=flow), pch=21, size=5) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -319,17 +305,11 @@ flow_dis <- data %>%
     xlab("Time of day (24 hr)")
   # Fig 3D
   dcharge<-ggplot(flow_dis, aes(x=discharge, y=current, fill=bay)) +
-    geom_smooth(aes(colour=bay)) +
+  #  geom_smooth(aes(colour=bay)) +
     geom_point(pch=21, size=5) +
     scale_x_continuous(limits=c(1600,10000), breaks=seq(1600,10000, by=2000), labels=seq(1600,10000,by=2000)) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                        name="",
-                        breaks=c("B2", "B6", "B11"),
-                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -351,29 +331,78 @@ flow_dis <- data %>%
   grid.newpage()
   grid.draw(rbind(ggplotGrob(date), ggplotGrob(start), ggplotGrob(dcharge), size="last"))
 
+
+  
+### SEA LEVEL DATA 
   
 # Download and extract tidal data from EC to examine Bay current velocity ~ tide height
-sealvl <- read.csv("7654-01-APR-2017_slev2.csv")                # Sea level data for April at New Westminster (Stn # 7654) 
+sealvl <- read.csv("7654-ALL-2017_slev.csv")                # Sea level data for April at New Westminster (Stn # 7654) 
 
 # Split Date and Time into 2 columns to compare with sampling data easier 
 sealvl <- sealvl %>% 
-  rename(sea_level_m = SLEV.metres.) %>%
-  separate(Obs_date, into = c("date", "time"), sep = " (?=[^ ]+$)") %>%
+  rename(sea_level_m = SLEV.metres.,
+         date = Obs_date) %>%
+  separate(date, into = c("date", "time"), sep = " (?=[^ ]+$)") %>%
   mutate(date = lubridate::dmy(date)) %>%
-  mutate(time = paste(gsub(":","", time))) %>%
-  mutate_at(vars(c(2)), funs(as.numeric)) %>%
-  filter(date > "2017-04-02") %>%
-  filter(between(time, 609, 1244)) %>%
-  print()
-  
+  unite(datetime, date, time, sep=" ") %>%
+  mutate(datetime = lubridate::ymd_hm(datetime)) %>%
+  separate(datetime, into = c("date", "time"), sep = " (?=[^ ]+$)") %>% 
+  mutate(datetime = paste(date, time, sep=" ")) %>%
+  filter(datetime > "2017-04-03 09:28:00", datetime < "2017-06-14 12:26:00") %>%
+  mutate_at(c(vars(1)), funs(as.Date))
 
-  
-  
-  
-  
-  
-  
-  
+# Gather original data, need run as well as other parameters already included in "flow" table 
+data2 <- data %>% 
+  mutate(datetime = paste(date, NEW_set_start, sep=" ")) %>%
+  mutate(datetime = lubridate::ymd_hm(datetime)) %>%
+  separate(datetime, into=c("date", "time"), sep = " (?=[^ ]+$)") %>% 
+  mutate(datetime = paste(date, time, sep=" ")) %>%
+  select(date, bay, datetime, time, run) %>%
+  group_by(date, bay, run, datetime) %>%
+  summarize(time = unique(time)) %>%
+  print()
+
+# Merge "sealvl" and "data2"
+data2$date <- as.Date(data2$date)
+lvl.merge <- inner_join(data2, sealvl, by=c("date", "time", "datetime"))
+
+# Merge lvl.merge with above flow table so I can look at velocity ~ sea level height 
+flow$date <- as.Date(flow$date)
+flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "datetime", "run"))
+
+
+
+
+#Fig 3E
+flow.lvl.merge$datetime<-as.POSIXct(as.character(flow.lvl.merge$datetime),format = "%Y-%m-%d %H:%M:%S")
+
+sea<-ggplot(flow.lvl.merge, aes(colour=bay)) +                          
+  geom_line(aes(x=datetime, y=sea_level_m), size=2, alpha=0.8) +
+  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  scale_x_datetime(date_breaks="100 hours", date_labels = "%h %d (%H:%M)") +
+  theme_bw() +
+  theme(text = element_text(colour="black", size=12),
+        plot.margin=margin(t=10,r=10,b=2,l=2),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major.x = element_line(colour = "gray"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=5), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
+        axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
+        legend.title = element_blank(),
+        legend.text = element_text(size=25),
+        legend.position = c(0.9,0.2),
+        legend.background = element_blank(),
+        legend.box.background = element_rect(colour = "black")) +
+  ylab("Sea level (m)") +
+  xlab("Date and time (24 hr)") 
+
+
+
   
 
 # Given these plots, we can see that current velocity varies considerably by: 
