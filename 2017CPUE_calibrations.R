@@ -9,7 +9,7 @@ data <- read.csv("TEB_leftjoin.csv")
 # Fix variable formats 
 data$date <- as.Date(data$date)
 
-# Libraries to use
+# Packages to use
 library(dplyr)
 library(ggplot2)
 library(tidyr)
