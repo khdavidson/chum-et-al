@@ -283,7 +283,7 @@ flow_dis <- data %>%
           legend.position="none") +
     ylab("Current velocity (m/s)") +
     xlab("Time of day (24 hr)")
-  #Fig 3C
+  #Omitted from Fig 3
   datetime<-ggplot(flow, aes(fill=bay)) +                           # Not super informative - trends obviously more driven by discharge than tide apparently
     geom_point(aes(x=datetime, y=flow), pch=21, size=5) +
     scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
@@ -303,7 +303,7 @@ flow_dis <- data %>%
           legend.position="none") +
     ylab("Current velocity (m/s)") +
     xlab("Time of day (24 hr)")
-  # Fig 3D
+  # Fig 3C
   dcharge<-ggplot(flow_dis, aes(x=discharge, y=current, fill=bay)) +
   #  geom_smooth(aes(colour=bay)) +
     geom_point(pch=21, size=5) +
@@ -370,39 +370,57 @@ lvl.merge <- inner_join(data2, sealvl, by=c("date", "time", "datetime"))
 flow$date <- as.Date(flow$date)
 flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "datetime", "run"))
 
+  #Fig 4A
+  flow.lvl.merge$datetime<-as.POSIXct(as.character(flow.lvl.merge$datetime),format = "%Y-%m-%d %H:%M:%S")
+  
+  sea<-ggplot(flow.lvl.merge, aes(colour=bay)) +                          
+    geom_line(aes(x=datetime, y=sea_level_m), size=2, alpha=0.8) +
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_x_datetime(date_breaks="100 hours", date_labels = "%h %d (%H:%M)") +
+    theme_bw() +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=20,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major.x = element_line(colour = "gray60"),
+          panel.grid.major.y = element_line(colour="transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_text(margin=margin(t=10,r=0,b=20,l=0), face="bold", size=30),
+          axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
+          legend.title = element_blank(),
+          legend.text = element_text(size=25),
+          legend.position = c(0.9,0.2),
+          legend.background = element_blank(),
+          legend.box.background = element_rect(colour = "black")) +
+    ylab("Sea level (m)") +
+    xlab("Date and time (24 hr)") 
 
-
-
-#Fig 3E
-flow.lvl.merge$datetime<-as.POSIXct(as.character(flow.lvl.merge$datetime),format = "%Y-%m-%d %H:%M:%S")
-
-sea<-ggplot(flow.lvl.merge, aes(colour=bay)) +                          
-  geom_line(aes(x=datetime, y=sea_level_m), size=2, alpha=0.8) +
-  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
-  scale_x_datetime(date_breaks="100 hours", date_labels = "%h %d (%H:%M)") +
-  theme_bw() +
-  theme(text = element_text(colour="black", size=12),
-        plot.margin=margin(t=10,r=10,b=2,l=2),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major.x = element_line(colour = "gray"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=5), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
-        axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
-        legend.title = element_blank(),
-        legend.text = element_text(size=25),
-        legend.position = c(0.9,0.2),
-        legend.background = element_blank(),
-        legend.box.background = element_rect(colour = "black")) +
-  ylab("Sea level (m)") +
-  xlab("Date and time (24 hr)") 
-
-
-
+  sea_vel<-ggplot(flow.lvl.merge, aes(fill=bay)) +                           # Not super informative - trends obviously more driven by discharge than tide apparently
+    geom_point(aes(x=sea_level_m, y=flow), pch=21, size=5) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    theme_bw() +
+    theme(text = element_text(colour="black", size=12),
+          plot.margin=margin(t=10,r=20,b=2,l=2),
+          panel.background = element_rect(fill = "white", colour = "black", size=2),
+          panel.grid.minor = element_line(colour = "transparent"),
+          panel.grid.major = element_line(colour = "transparent"),
+          plot.background = element_rect(fill = "transparent"),
+          axis.ticks = element_line(size=1.2),
+          axis.ticks.length = unit(0.5, "line"),
+          axis.title.y = element_text(margin=margin(t=10,r=15,b=0,l=5), face="bold", size=30),
+          axis.text.y = element_text(colour="black", size=25),
+          axis.title.x = element_text(margin=margin(t=5,r=0,b=10,l=0), face="bold", size=30),
+          axis.text.x = element_text(colour="black", size=25),
+          legend.position="none") +
+    ylab("Current velocity (m/s)") +
+    xlab("Sea level (m)")
+  
+  grid.newpage()
+  grid.draw(rbind(ggplotGrob(sea), ggplotGrob(sea_vel),size="last"))
   
 
 # Given these plots, we can see that current velocity varies considerably by: 
