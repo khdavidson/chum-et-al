@@ -60,7 +60,7 @@ catch.sample.merge <- catch.sample.merge %>%
   mutate(n_CU_exp = CU_n+n_unsampled_CU) %>%
   print()
 
-    # Time out to replace the new NA's with the original numbers (no expansion factor was added so it produced an NA)
+    # Replace the new NA's with the original numbers (no expansion factor was added so it produced an NA)
     catch.sample.merge$n_CU_exp <- ifelse(is.na(catch.sample.merge$n_CU_exp), catch.sample.merge$sum_SO, catch.sample.merge$n_CU_exp)           # Again, some CUs didn't have expansion factors, so just replace NAs generated with their original abundances
 
     
@@ -87,7 +87,9 @@ date_total <- exp.merge %>%
 
 
 # NOW SUBSAMPLE EVERY SECOND ROW 
-second_day <- selectByDate(date_total, start = "2017-04-03", end = "2017-06-14", day = seq(1,31,by=2))
+second_day <- selectByDate(date_total, start = "2017-04-03", end = "2017-06-14", day = seq(1,31,by=2))   # start Apr 3
+second_day_alt <- selectByDate(date_total, start = "2017-04-04", end = "2017-06-14", day = seq(1,31,by=2))   # start Apr 3
+
 
 
 # Calculate overall % each CU 
@@ -106,6 +108,14 @@ second_day <- selectByDate(date_total, start = "2017-04-03", end = "2017-06-14",
     mutate(sum_propn = sum_CU/sum(sum_CU)) %T>%
     write.csv("CU_propn_second_day.csv")
 
+  # From sampling every second day-alternative
+  CU_second_alt <- second_day_alt %>% 
+    group_by(CU_final) %>% 
+    summarize(sum_CU = sum(CU_n_exp, na.rm=T)) %>% 
+    mutate(sum_propn = sum_CU/sum(sum_CU)) %T>%
+    write.csv("CU_propn_second_day_alt.csv")
+  
+  
 # Plot results 
 every_day<-ggplot(date_total, aes(x=date,y=CU_exp_propn, fill=CU_final)) +
   geom_bar(stat="identity")
