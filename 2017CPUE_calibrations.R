@@ -579,7 +579,7 @@ bay_flow_sec <- data %>%
     # Looking at Figure 4, dramatic changes occur when accounting for run time - suddenly the catch in Bay 11 is highest, 
       # which doesn't seem correct. -- I don't think it is correct. For now should just deal with 15 minute runs only for simplicity 
 
-    # Are there significant differences in run time length among bays? 
+    # Are there differences in run time length among bays? 
     bay_runs <- data %>% 
       select(date, USID, run, bay, current_speed_mps, NEW_set_start, sockeye_smolt_total, run_time_der) %>% 
       filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                      # 135 entries lost due to no GPS data
@@ -601,5 +601,117 @@ bay_flow_sec <- data %>%
     summary(lm1)
     TukeyHSD(a1)
 
+    
+#########################################################################################################################################
 
+## USING JUST RST VOLUME AND STANDARDIZING THAT WAY
+    
+# Read in big 2017 dataframe 
+data <- read.csv("TEB_leftjoin.csv")
+# Make 'date' as.Date for R
+data$date <- as.Date(data$date)
+    
+# Total number of fish caught daily expanded for water volume 
+dailycatch <- data %>% 
+  select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time, run, current_speed_mps) %>%
+  filter(trap_type =="RST", sockeye_smolt_total != "NR") %>% 
+  group_by(date, USID) %>% 
+  summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), run_time=unique(run_time), current=unique(current_speed_mps, na.rm=T)) %>% 
+  mutate(run_time_sec = as.numeric(as.character(gsub("0:","", run_time)))*60) %>%
+  mutate(fished_vol = 1865.71) %>%
+  mutate(bay_width = 100) %>% 
+  mutate(bay_depth = 440/3) %>%
+  mutate(fish_m3 = unq_catch/fished_vol) %>% 
+  mutate(bay_dischg_moment_m3s = bay_width*bay_depth*current) %>% 
+  mutate(CPUE = fish_m3*bay_dischg_moment_m3s*run_time_sec) %>%
+  group_by(date) %>%
+  summarize(daily_count=sum(unq_catch, na.rm=T)*1000) %>%
+  print()    
+    
+    
 
+    # Chilko check
+    chilko <- c("Chilko Combined", "Chilko (S)", "Chilko (ES)")
+    chilko_dailycatch <- data %>% 
+      select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time, run, current_speed_mps) %>%
+      filter(trap_type =="RST", CU_final %in% chilko) %>% 
+      group_by(date, USID) %>% 
+      summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), run_time=unique(run_time), current=unique(current_speed_mps, na.rm=T)) %>% 
+      mutate(run_time_sec = as.numeric(as.character(gsub("0:","", run_time)))*60) %>%
+      mutate(fished_vol = 1865.71) %>%
+      mutate(bay_width = 100) %>% 
+      mutate(bay_depth = 440/3) %>%
+      mutate(fish_m3 = unq_catch/fished_vol) %>% 
+      mutate(bay_dischg_moment_m3s = bay_width*bay_depth*current) %>% 
+      mutate(CPUE = fish_m3*bay_dischg_moment_m3s*run_time_sec) %>%
+      group_by(date) %>% 
+      summarize(daily_CPUE = sum(CPUE), daily_count=sum(unq_catch)*1000) %>%
+      print()
+    
+    chilko_fence <- read.csv("chilko_fence.csv")
+    chilko_fence <- chilko_fence %>% 
+      rename(date = DATE,
+             daily_count_chilko = Daily.Count...Chilko,
+             daily_propn_chilko = Daily.Proportion...Chilko,
+             cuml_count_chilko = Cumulative.Chilko.Total,
+             cuml_propn_chilko = X..Cumulative.Chilko) %>% 
+      mutate(date = lubridate::dmy(date))
+    
+    # Join CPUE and chilko fence 
+    chilko.merge <- left_join(chilko_fence,chilko_dailycatch, by="date")
+    
+    # Plot 
+    ggplot() +
+      geom_line(data=chilko_fence, aes(x=date, y=daily_count_chilko, 
+                                       colour="Daily count at Chilko",
+                                       linetype = "Daily count at Chilko"), size=1.5) +
+      geom_bar(data=chilko_dailycatch, aes(x=date, y=daily_count,
+                                    fill="Daily count at Mission (Chilko only)"), stat="identity", colour="black", width=1, alpha=0.8) +
+      geom_line(data=chilko_dailycatch, aes(x=date, y=daily_CPUE,
+                                            colour="CPUE (Chilko only)",
+                                            linetype="CPUE (Chilko only)"), size=2) +
+      scale_colour_manual("", values=c("Daily count at Chilko" = "gray40", 
+                                       "CPUE (Chilko only)" = "black")) +
+      scale_linetype_manual("", values=c("Daily count at Chilko" = 3,
+                                         "CPUE (Chilko only)" = 1)) +
+      scale_fill_manual("", values=c("Daily count at Mission (Chilko only)" = "gray40")) +
+      scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
+      scale_y_continuous(sec.axis = sec_axis(~., name = "CPUE and \nTotal daily count at Mission (*1000)")) +
+      theme_bw() +
+      theme(text = element_text(colour="black", size=12),
+            plot.margin=margin(t=10,r=10,b=2,l=2),
+            panel.background = element_rect(fill = "white", colour = "black", size=2),
+            panel.grid.minor = element_line(colour = "transparent"),
+            panel.grid.major = element_line(colour = "transparent"),
+            plot.background = element_rect(fill = "transparent"),
+            axis.ticks = element_line(size=1.2),
+            axis.ticks.length = unit(0.5, "line"),
+            axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=20), face="bold", size=30),
+            axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=5), face="bold", size=30),
+            axis.text.y = element_text(colour="black", size=25),
+            axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
+            axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+            legend.text = element_text(size=25),
+            legend.position = c(0.7,0.85),
+            legend.background = element_blank(),
+            legend.box.background = element_rect(colour = "black"),
+            legend.spacing.y = unit(-3.5, "mm"), 
+            legend.key.height = unit(2, "line"),
+            legend.key.width = unit(2, "line")) +
+      guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch"))+
+      ylab("Total daily count at Chilko fence") +
+      xlab("Date")
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
