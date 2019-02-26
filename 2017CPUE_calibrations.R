@@ -17,6 +17,7 @@ library(magrittr)
 library(stringr)
 library(grid)
 library(gridExtra)
+library(scales)
 
 # Need to make a new column for run time (sec) - the old one was derived from Basecamp tracks and might not be actually "true" - instead
 # convert the rounded run times (min) to represent run times in seconds. A coarse estimate, given the resolution is at the minute-level,
@@ -603,8 +604,7 @@ bay_flow_sec <- data %>%
 
     
 #########################################################################################################################################
-
-## USING JUST RST VOLUME AND STANDARDIZING THAT WAY
+## USING JUST RST VOLUME AND BAY CSA/DISCHARGE
     
 # Read in big 2017 dataframe 
 data <- read.csv("TEB_leftjoin.csv")
@@ -612,20 +612,27 @@ data <- read.csv("TEB_leftjoin.csv")
 data$date <- as.Date(data$date)
     
 # Total number of fish caught daily expanded for water volume 
+  # Non-900 sec runs 
+
 dailycatch <- data %>% 
   select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time, run, current_speed_mps) %>%
   filter(trap_type =="RST", sockeye_smolt_total != "NR") %>% 
   group_by(date, USID) %>% 
   summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), run_time=unique(run_time), current=unique(current_speed_mps, na.rm=T)) %>% 
   mutate(run_time_sec = as.numeric(as.character(gsub("0:","", run_time)))*60) %>%
-  mutate(fished_vol = 1865.71) %>%
+  mutate(fished_vol=NA) %>%
+  mutate(fished_vol = as.numeric(ifelse(run_time_sec=="600", "1243.836", 
+                                        ifelse(run_time_sec=="1020", "2114.521",
+                                               ifelse(run_time_sec=="1080", "2238.905",
+                                                      ifelse(run_time_sec=="1140", "2363.288",
+                                                             ifelse(run_time_sec=="1200", "2487.672",
+                                                                    ifelse(run_time_sec=="1260", "2612.056",
+                                                                           ifelse(run_time_sec=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(fish_m3 = unq_catch/fished_vol) %>% 
   mutate(bay_width = 100) %>% 
   mutate(bay_depth = 440/3) %>%
-  mutate(fish_m3 = unq_catch/fished_vol) %>% 
   mutate(bay_dischg_moment_m3s = bay_width*bay_depth*current) %>% 
   mutate(CPUE = fish_m3*bay_dischg_moment_m3s*run_time_sec) %>%
-  group_by(date) %>%
-  summarize(daily_count=sum(unq_catch, na.rm=T)*1000) %>%
   print()    
     
     
@@ -676,7 +683,8 @@ dailycatch <- data %>%
                                          "CPUE (Chilko only)" = 1)) +
       scale_fill_manual("", values=c("Daily count at Mission (Chilko only)" = "gray40")) +
       scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
-      scale_y_continuous(sec.axis = sec_axis(~., name = "CPUE and \nTotal daily count at Mission (*1000)")) +
+      scale_y_continuous(labels=comma, sec.axis = sec_axis(~., name = "CPUE and \n Daily count at Mission (*1000)", 
+                                             breaks = seq(0,3000000, by=600000), labels = comma)) +
       theme_bw() +
       theme(text = element_text(colour="black", size=12),
             plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -699,7 +707,7 @@ dailycatch <- data %>%
             legend.key.height = unit(2, "line"),
             legend.key.width = unit(2, "line")) +
       guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch"))+
-      ylab("Total daily count at Chilko fence") +
+      ylab("Daily count at Chilko") +
       xlab("Date")
     
     
