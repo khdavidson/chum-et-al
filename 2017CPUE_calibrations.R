@@ -27,7 +27,7 @@ data <- data %>%
   mutate_at(vars(c(17)), funs(as.character)) %>%
   mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
   mutate_at(vars(c(17)), funs(as.numeric)) %>%
-  mutate(run_time_der = run_time*60)
+  mutate(run_time_s = run_time*60)
 
 
 ################################################################################################################################################
@@ -38,148 +38,6 @@ data <- data %>%
 
 
 ################################################################################################################################################
-
-
-#                                      METHOD 1.1: Daily catch/daily discharge (scale: day)
-
-
-
-# Calibrate daily total catch by daily discharge @ Hope
-CPUE_discharge <- data %>%
-  select(sockeye_smolt_total, discharge_m3s, date, USID, run, run_time) %>% 
-  filter(sockeye_smolt_total != "NR", run_time == "15") %>%                                                                         # Remove the messy NR entries and select only 15 minute runs
-  group_by(date, USID, discharge_m3s) %>%                                                                                             # Group by date, sampling event and discharge
-  summarize(unique_SO = unique(sockeye_smolt_total, na.rm=T), unique_runs=unique(run)) %>%                                            # Create new variables to select the total number of sockeye in each sampling event and the number of runs
-  select(date, USID, discharge_m3s, unique_SO, unique_runs) %>%                                                                       # Select those new variables as well as other ones
-  group_by(date) %>%                                                                                                                  # Group by date
-  summarize(total_SO = sum(unique_SO, na.rm=T), discharge = mean(discharge_m3s, na.rm=T), nruns=n_distinct(unique_runs)) %>%          # Create new variables to sum the daily total sockeye, daily discharge and number of runs in a day 
-  mutate(fish_m3s = (total_SO/discharge)*1000) %>%                                                                                    # Create new column to divide daily total sockeye/daily discharge
-  mutate(fish_run = (total_SO/nruns)*10) %>%                                                                                          # Create new column to divide daily total sockeye/daily number of runs (original CPUE method)
-  print()
-
-# Plot dyplyr results (Figure 1) 
-CPUE_discharge$date <- as.Date(as.character(CPUE_discharge$date))
-
-ggplot(CPUE_discharge, aes(x=date)) +
-  geom_bar(aes(y=total_SO, fill="Total number of Fish"), stat="identity", colour="gray30", alpha=0.4) +
-  geom_line(aes(y=fish_run, group=1, 
-                colour="CPUE: Total Fish/runs (*10)", 
-                linetype="CPUE: Total Fish/runs (*10)",
-                size="CPUE: Total Fish/runs (*10)")) +
-  geom_line(aes(y=fish_m3s, group=2, 
-                colour="CPUE: Total Fish/m3/s (*1000)", 
-                linetype = "CPUE: Total Fish/m3/s (*1000)",
-                size="CPUE: Total Fish/m3/s (*1000)")) + 
-  scale_fill_manual("", values="gray60") +
-  scale_colour_manual("", values=c("CPUE: Total Fish/runs (*10)" = "black", 
-                                   "CPUE: Total Fish/m3/s (*1000)" = "black")) +
-  scale_linetype_manual("", values = c("CPUE: Total Fish/runs (*10)" = 3, 
-                                       "CPUE: Total Fish/m3/s (*1000)" = 1)) +
-  scale_size_manual("", values = c("CPUE: Total Fish/runs (*10)"=1.5, 
-                                   "CPUE: Total Fish/m3/s (*1000)"=1.5)) +
-  scale_x_date(limits=as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "5 day", date_labels = "%m-%d") + 
-  scale_y_continuous(limits=c(0,500), breaks=seq(0,500,by=100), labels = seq(0,500, by=100),
-                     sec.axis = sec_axis(~., name = "CPUE")) +
-  theme_bw() +
-  theme(text = element_text(colour="black", size=12),
-        plot.margin=margin(t=15,r=10,b=2,l=2),
-        panel.background = element_rect(fill = "white", colour="black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "white"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-        axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=15), angle=90, size=30),
-        legend.text = element_text(size=25),
-        legend.position = c(0.76,0.88),
-        legend.background = element_blank(),
-        legend.box.background = element_rect(colour = "black"),
-        legend.spacing.y = unit(-3.5, "mm"), 
-        legend.key.height = unit(2, "line"),
-        legend.key.width = unit(2, "line")) +
-  guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch")) +
-  ylab("Total number of fish") +
-  xlab("Date")
-  
-
-
-
-# Method 1.2: Daily catch/daily discharge ACCOUNTING FOR SAMPLING TIME (scale: day)
-
-# Calibrate daily total catch by daily discharge @ Hope - ACCOUNT FOR SAMPLING EFFORT (TOTAL RUN TIME in sec)
-CPUE_discharge_run <- data %>%
-  select(sockeye_smolt_total, discharge_m3s, date, USID, run, run_time_der) %>% 
-  filter(sockeye_smolt_total != "NR") %>%                                                                        
-  group_by(date, USID, discharge_m3s, run, run_time_der) %>%                                        
-  summarize(unique_SO = unique(sockeye_smolt_total, na.rm=T)) %>%
-  group_by(date, run, discharge_m3s) %>%
-  summarize(total_SO = sum(unique_SO), unique_time = unique(run_time_der)) %>%
-  group_by(date) %>% 
-  summarize(total_SO = sum(total_SO), total_time = sum(unique_time), 
-            discharge = mean(discharge_m3s, na.rm=T), runs = n_distinct(run)) %>%
-  mutate(fish_run = total_SO/runs*10,
-         fish_m3s = total_SO/discharge*1000,
-         fish_m3 = ((total_SO/discharge)/total_time)*10000000) %>%
-  print()
-
-# Plot dyplyr results (Figure 2)
-ggplot(CPUE_discharge_run, aes(x=date)) +
-  geom_line(aes(y=fish_run, group=1, 
-                colour="CPUE: Total Fish/runs", 
-                linetype="CPUE: Total Fish/runs",
-                size="CPUE: Total Fish/runs"), alpha = 1) +
-  geom_line(aes(y=fish_m3s, group=2, 
-                colour="CPUE: Total Fish/m3/s", 
-                linetype = "CPUE: Total Fish/m3/s",
-                size="CPUE: Total Fish/m3/s"), alpha = 1) + 
-  geom_line(aes(y=fish_m3, group=3, 
-                colour="CPUE: Total Fish/m3", 
-                linetype = "CPUE: Total Fish/m3",
-                size="CPUE: Total Fish/m3"), alpha = 0.7) + 
-  scale_colour_manual("", values=c("CPUE: Total Fish/runs" = "black", 
-                                   "CPUE: Total Fish/m3/s" = "black",
-                                   "CPUE: Total Fish/m3" = "blue")) +
-  scale_linetype_manual("", values = c("CPUE: Total Fish/runs" = 3, 
-                                       "CPUE: Total Fish/m3/s" = 1,
-                                       "CPUE: Total Fish/m3" = 1)) +
-  scale_size_manual("", values = c("CPUE: Total Fish/runs" = 1.5, 
-                                   "CPUE: Total Fish/m3/s" = 1.5,
-                                   "CPUE: Total Fish/m3" = 1.5)) +
-  scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "5 day", date_labels = "%m-%d") + 
-  scale_y_continuous(limits=c(0,325), breaks=seq(0,325,by=75), labels = seq(0,325, by=75)) +
-  theme_bw() +
-  theme(text = element_text(colour="black", size=12),
-        plot.margin=margin(t=10,r=10,b=2,l=2),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y = element_text(margin=margin(t=0,r=15,b=0,l=5), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-        legend.text = element_text(size=25),
-        legend.position = c(0.8,0.85),
-        legend.background = element_blank(),
-        legend.box.background = element_rect(colour = "black"),
-        legend.spacing.y = unit(-3.5, "mm"), 
-        legend.key.height = unit(2, "line"),
-        legend.key.width = unit(2, "line")) +
-  guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch")) +
-  ylab("CPUE") +
-  xlab("Date")
-
-
-################################################################################################################################################
-
-
-#                                    METHOD 2: Standardizing by Bay flow (scale: Bay, date-run level)
 
 
 ####################
@@ -242,7 +100,9 @@ flow_dis <- data %>%
   date<-ggplot(flow, aes(fill=bay)) + 
     geom_point(aes(x=date, y=flow), pch=21, size=5) +
     scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "7 day", date_labels = "%h %d") +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -260,14 +120,16 @@ flow_dis <- data %>%
           legend.text = element_text(size=25),
           legend.position = c(0.1,0.7),
           legend.background = element_blank(),
-          legend.box.background = element_rect(colour = "black"))+
+          legend.box.background = element_rect(colour = "black")) +
         xlab("Date") +
         ylab("")
   # Fig 3B    
   flow$time <- as.POSIXct(strptime(flow$time, format="%k:%M:%S"))
   start<-ggplot(flow, aes(fill=bay)) + 
     geom_point(aes(x=time, y=flow), pch=21, size=5) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -287,7 +149,9 @@ flow_dis <- data %>%
   #Omitted from Fig 3
   datetime<-ggplot(flow, aes(fill=bay)) +                           # Not super informative - trends obviously more driven by discharge than tide apparently
     geom_point(aes(x=datetime, y=flow), pch=21, size=5) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -306,11 +170,14 @@ flow_dis <- data %>%
     xlab("Time of day (24 hr)")
   # Fig 3C
   dcharge<-ggplot(flow_dis, aes(x=discharge, y=current, fill=bay)) +
-  #  geom_smooth(aes(colour=bay)) +
     geom_point(pch=21, size=5) +
     scale_x_continuous(limits=c(1600,10000), breaks=seq(1600,10000, by=2000), labels=seq(1600,10000,by=2000)) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
+                        breaks=c("B2", "B6", "B11"), 
+                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=10,b=2,l=2),
@@ -332,17 +199,19 @@ flow_dis <- data %>%
   grid.newpage()
   grid.draw(rbind(ggplotGrob(date), ggplotGrob(start), ggplotGrob(dcharge), size="last"))
 
-
   
-### SEA LEVEL DATA 
+#
+#  
+#### SEA LEVEL DATA 
+#
+#  
   
 # Download and extract tidal data from EC to examine Bay current velocity ~ tide height
 sealvl <- read.csv("7654-ALL-2017_slev.csv")                # Sea level data for April at New Westminster (Stn # 7654) 
 
 # Split Date and Time into 2 columns to compare with sampling data easier 
 sealvl <- sealvl %>% 
-  rename(sea_level_m = SLEV.metres.,
-         date = Obs_date) %>%
+  rename(sea_level_m = SLEV.metres., date = Obs_date) %>%
   separate(date, into = c("date", "time"), sep = " (?=[^ ]+$)") %>%
   mutate(date = lubridate::dmy(date)) %>%
   unite(datetime, date, time, sep=" ") %>%
@@ -372,11 +241,13 @@ flow$date <- as.Date(flow$date)
 flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "datetime", "run"))
 
   #Fig 4A
-  flow.lvl.merge$datetime<-as.POSIXct(as.character(flow.lvl.merge$datetime),format = "%Y-%m-%d %H:%M:%S")
+  flow.lvl.merge$datetime <- as.POSIXct(as.character(flow.lvl.merge$datetime),format = "%Y-%m-%d %H:%M:%S")
   
   sea<-ggplot(flow.lvl.merge, aes(colour=bay)) +                          
     geom_line(aes(x=datetime, y=sea_level_m), size=2, alpha=0.8) +
-    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
+                        breaks=c("B2", "B6", "B11"), 
+                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
     scale_x_datetime(date_breaks="100 hours", date_labels = "%h %d (%H:%M)") +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
@@ -402,7 +273,9 @@ flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "dateti
 
   sea_vel<-ggplot(flow.lvl.merge, aes(fill=bay)) +                           # Not super informative - trends obviously more driven by discharge than tide apparently
     geom_point(aes(x=sea_level_m, y=flow), pch=21, size=5) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", breaks=c("B2", "B6", "B11"), labels=c("Bay 2", "Bay 6", "Bay 11")) +
+    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
     theme_bw() +
     theme(text = element_text(colour="black", size=12),
           plot.margin=margin(t=10,r=20,b=2,l=2),
@@ -436,11 +309,14 @@ flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "dateti
 #
 ######
     
-
+  
+#########################################################################################################################################
+  
+  
 ####################
 #
 # NEXT,
-# CALIBRATE CATCH BY VELOCITY - Calculate velocity for each date-run event 
+# CALIBRATE CATCH USING CSA/WATER VOLUME FISHED 
 #     RECALL, current varies:
 #       Intra-annually                (~Date, due to discharge)
 #       Over the course of a day      (~Time, due to tide)
@@ -449,277 +325,313 @@ flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "dateti
 #     This is at the run scale so dont need to account for sampling time (unless scaled up to daily CPUE)
 # 
 ####################  
-    
-# Extract current velocity and # sockeye to calculate # FISH/M/S
-bay_flow <- data %>% 
-  select(date, USID, run, bay, current_speed_mps, NEW_set_start, sockeye_smolt_total) %>% 
-  filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                      # 135 entries lost due to no GPS data
-  group_by(date, USID, run, bay, NEW_set_start) %>% 
-  summarize(current = unique(current_speed_mps), catch = unique(sockeye_smolt_total, na.rm=T)) %>% 
-  group_by(date, run, bay, NEW_set_start) %>%
-  summarize(current = unique(current), total = sum(catch, na.rm=T)) %>% 
-  mutate(fish_ms = total/current) %>%
-  group_by(date, bay) %>% 
-  summarize(sum_total = sum(total), sum_fish_ms=sum(fish_ms)) %>% 
-  print()
-  
 
-  # FIGURE 4: Plot original total catch and fish/m/s  
-  bay_flow$bay <- factor(bay_flow$bay, levels=c("B2", "B6", "B11"), ordered=T)
-  # Fig 4A
-  total<-ggplot(bay_flow, aes(colour=bay, fill=bay)) +
-    geom_vline(aes(xintercept = date), col="gray60") +
-    geom_bar(stat="identity", aes(x=date, y=sum_total), position="dodge") +
-    scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
-    scale_y_continuous(limits=c(0,400)) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    theme(text = element_text(colour="black", size=12),
-          plot.margin=margin(t=10,r=10,b=2,l=2),
-          panel.background = element_rect(fill = "white", colour = "black", size=2),
-          panel.grid.minor = element_line(colour = "transparent"),
-          panel.grid.major = element_line(colour = "transparent"),
-          plot.background = element_rect(fill = "transparent"),
-          axis.ticks = element_line(size=1.2),
-          axis.ticks.length = unit(0.5, "line"),
-          axis.title.y = element_text(margin=margin(t=50,r=25,b=0,l=5), face="bold", size=30),
-          axis.text.y = element_text(colour="black", size=25),
-          axis.title.x = element_blank(),
-          axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
-          legend.title = element_blank(),
-          legend.text = element_text(size=25),
-          legend.position = c(0.1,0.7),
-          legend.background = element_blank(),
-          legend.box.background = element_rect(colour = "black")) +
-    ylab("Total \n smolts")
-  # Fig 4B
-  fish_ms<-ggplot(bay_flow, aes(colour=bay,fill=bay, group=bay)) +
-    geom_vline(aes(xintercept = date), col="gray60") +
-    geom_bar(stat="identity", aes(x=date, y=sum_fish_ms), position="dodge") +
-    scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
-    scale_y_continuous(limits=c(0,400)) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                        name="",
-                        breaks=c("B2", "B6", "B11"),
-                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    theme(text = element_text(colour="black", size=12),
-          plot.margin=margin(t=10,r=10,b=2,l=2),
-          panel.background = element_rect(fill = "white", colour = "black", size=2),
-          panel.grid.minor = element_line(colour = "transparent"),
-          panel.grid.major = element_line(colour = "transparent"),
-          plot.background = element_rect(fill = "transparent"),
-          axis.ticks = element_line(size=1.2),
-          axis.ticks.length = unit(0.5, "line"),
-          axis.title.y = element_text(margin=margin(t=0,r=25,b=0,l=5), face="bold", size=30),
-          axis.text.y = element_text(colour="black", size=25),
-          axis.title.x = element_blank(),
-          axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
-          legend.position = "none") +
-    ylab("Total \n smolts/m/s")
-
-
-# Also consider sampling time lengths - Standardizing by bay flow, accounting for run length (sec)
-# Extract variables as above, as well as sampling time (sec) 
-bay_flow_sec <- data %>% 
-  select(date, USID, run, bay, current_speed_mps, NEW_set_start, sockeye_smolt_total, run_time_der) %>% 
-  filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                      # 135 entries lost due to no GPS data
-  group_by(date, USID, run, bay, NEW_set_start) %>% 
-  summarize(current = unique(current_speed_mps), catch = unique(sockeye_smolt_total, na.rm=T), unq_sec = unique(run_time_der)) %>% 
-  group_by(date, run, bay, NEW_set_start) %>%
-  summarize(current = unique(current), total = sum(catch, na.rm=T), run_sec = unique(unq_sec)) %>% 
-  mutate(fish_ms = total/current) %>%
-  mutate(fish_m = fish_ms/run_sec) %>% 
-  group_by(date, bay) %>% 
-  summarize(sum_total = sum(total), sum_fish_ms=sum(fish_ms), sum_fish_m = sum(fish_m)*100) %>% 
-  print()
-
-  #Fig 4C
-  fish_m<-ggplot(bay_flow_sec, aes(colour=bay,fill=bay, group=bay)) +
-    geom_vline(aes(xintercept = date), col="gray60") +
-    geom_bar(stat="identity", aes(x=date, y=sum_fish_m), position="dodge") +
-    scale_x_date(limits=as.Date(c("2017-04-22", "2017-05-18")), breaks = "2 day", date_labels = "%m-%d") +
-    scale_y_continuous(limits=c(0,50)) +
-    scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                      name="",
-                      breaks=c("B2", "B6", "B11"),
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"), 
-                        name="",
-                        breaks=c("B2", "B6", "B11"),
-                        labels=c("Bay 2", "Bay 6", "Bay 11")) +
-    theme(text = element_text(colour="black", size=12),
-          plot.margin=margin(t=10,r=10,b=2,l=2),
-          panel.background = element_rect(fill = "white", colour = "black", size=2),
-          panel.grid.minor = element_line(colour = "transparent"),
-          panel.grid.major = element_line(colour = "transparent"),
-          plot.background = element_rect(fill = "transparent"),
-          axis.ticks = element_line(size=1.2),
-          axis.ticks.length = unit(0.5, "line"),
-          axis.title.y = element_text(margin=margin(t=0,r=25,b=0,l=5), face="bold", size=30),
-          axis.text.y = element_text(colour="black", size=25),
-          axis.title.x = element_text(margin=margin(t=5,r=0,b=2,l=0), face="bold", size=30),
-          axis.text.x = element_text(angle=45, hjust=1, colour="black", size=25),
-          legend.position = "none") +
-    xlab("Date") +
-    ylab("Total \n smolts/m")
-  
-  # Fig 4ABC draw
-  grid.newpage()
-  grid.draw(rbind(ggplotGrob(total), ggplotGrob(fish_ms), ggplotGrob(fish_m), size="last"))
-  grid.arrange(total, fish_ms, ncol=2)
-    # Looking at Figure 4, dramatic changes occur when accounting for run time - suddenly the catch in Bay 11 is highest, 
-      # which doesn't seem correct. -- I don't think it is correct. For now should just deal with 15 minute runs only for simplicity 
-
-    # Are there differences in run time length among bays? 
-    bay_runs <- data %>% 
-      select(date, USID, run, bay, current_speed_mps, NEW_set_start, sockeye_smolt_total, run_time_der) %>% 
-      filter(current_speed_mps != "#DIV/0!", current_speed_mps > 0) %>%                                      # 135 entries lost due to no GPS data
-      group_by(date, USID, run, bay, NEW_set_start) %>% 
-      summarize(current = unique(current_speed_mps), catch = unique(sockeye_smolt_total, na.rm=T), unq_sec = unique(run_time_der)) %>% 
-      group_by(date, run, bay, NEW_set_start) %>%
-      summarize(current = unique(current), total = sum(catch, na.rm=T), run_sec = unique(unq_sec)) %>%
-      group_by(bay) %>% 
-    print()
-    
-    lm1<-lm(bay_runs$run_sec ~ bay_runs$bay)
-    r1<-resid(lm1)
-    plot(r1)
-    hist(r1)
-    qqnorm(r1)
-    qqline(r1)
-    
-    a1 <- aov(bay_runs$run_sec ~ bay_runs$bay)
-    summary(lm1)
-    TukeyHSD(a1)
-
-    
-#########################################################################################################################################
+      
 ## USING JUST RST VOLUME AND BAY CSA/DISCHARGE
-    
-# Read in big 2017 dataframe 
-data <- read.csv("TEB_leftjoin.csv")
-# Make 'date' as.Date for R
-data$date <- as.Date(data$date)
-    
-# Total number of fish caught daily expanded for water volume 
-  # Non-900 sec runs 
 
-dailycatch <- data %>% 
-  select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time, run, current_speed_mps) %>%
-  filter(trap_type =="RST", sockeye_smolt_total != "NR") %>% 
-  group_by(date, USID) %>% 
-  summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), run_time=unique(run_time), current=unique(current_speed_mps, na.rm=T)) %>% 
-  mutate(run_time_sec = as.numeric(as.character(gsub("0:","", run_time)))*60) %>%
-  mutate(fished_vol=NA) %>%
-  mutate(fished_vol = as.numeric(ifelse(run_time_sec=="600", "1243.836", 
-                                        ifelse(run_time_sec=="1020", "2114.521",
-                                               ifelse(run_time_sec=="1080", "2238.905",
-                                                      ifelse(run_time_sec=="1140", "2363.288",
-                                                             ifelse(run_time_sec=="1200", "2487.672",
-                                                                    ifelse(run_time_sec=="1260", "2612.056",
-                                                                           ifelse(run_time_sec=="1320", "2736.439", "1865.71"))))))))) %>%
-  mutate(fish_m3 = unq_catch/fished_vol) %>% 
-  mutate(bay_width = 100) %>% 
-  mutate(bay_depth = 440/3) %>%
-  mutate(bay_dischg_moment_m3s = bay_width*bay_depth*current) %>% 
-  mutate(CPUE = fish_m3*bay_dischg_moment_m3s*run_time_sec) %>%
+# Three step calculation:
+  # 1. Number of fish/m3 fished (in 900 s, but calculation allows for other run lengths)
+  # 2. Water volume in Bay (per 900 s, but calculation allows for other run lengths)
+  # 3. CPUE fish catch (1*2)
+
+CPUEdailycatch <- data %>% 
+  select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, run, current_speed_mps) %>%
+  filter(trap_type =="RST", sockeye_smolt_total != "NR") %>%                                                                                               # Just RST for now
+  group_by(date, USID) %>%                                                                                                                                 # Group by date and sampling event
+  summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), run_time_s=unique(run_time_s), current=unique(current_speed_mps, na.rm=T)) %>%       # Create unique variables for number of fish, run, run length, and current velocity
+  mutate(fished_vol = as.numeric(ifelse(run_time_s=="600", "1243.836",                                                                                     # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                        ifelse(run_time_s=="1020", "2114.521",                                                                             # Syntax is "run seconds", "fished volume"
+                                               ifelse(run_time_s=="1080", "2238.905",
+                                                      ifelse(run_time_s=="1140", "2363.288",
+                                                             ifelse(run_time_s=="1200", "2487.672",
+                                                                    ifelse(run_time_s=="1260", "2612.056",
+                                                                           ifelse(run_time_s=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(fish_m3 = unq_catch/fished_vol) %>%                                                                                                               # Step 1: Calculate # fish/m3 (in x seconds)
+  mutate(bay_width = 440/3) %>%                                                                                                                            # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
+  mutate(bay_depth = 1.13) %>%                                                                                                                             # Bay depth for now is considered the RST fishing depth (1.13m)
+  mutate(bay_volume_m3s = bay_width*bay_depth*current*run_time_s) %>%                                                                                      # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
+  mutate(CPUE = fish_m3*bay_volume_m3s) %>%                                                                                                                # Step 3: CPUE fish abundance (Step 1*Step 2)                                        
   print()    
-    
-    
+  
 
-    # Chilko check
-    chilko <- c("Chilko Combined", "Chilko (S)", "Chilko (ES)")
-    chilko_dailycatch <- data %>% 
-      select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time, run, current_speed_mps) %>%
-      filter(trap_type =="RST", CU_final %in% chilko) %>% 
-      group_by(date, USID) %>% 
-      summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), run_time=unique(run_time), current=unique(current_speed_mps, na.rm=T)) %>% 
-      mutate(run_time_sec = as.numeric(as.character(gsub("0:","", run_time)))*60) %>%
-      mutate(fished_vol = 1865.71) %>%
-      mutate(bay_width = 100) %>% 
-      mutate(bay_depth = 440/3) %>%
-      mutate(fish_m3 = unq_catch/fished_vol) %>% 
-      mutate(bay_dischg_moment_m3s = bay_width*bay_depth*current) %>% 
-      mutate(CPUE = fish_m3*bay_dischg_moment_m3s*run_time_sec) %>%
-      group_by(date) %>% 
-      summarize(daily_CPUE = sum(CPUE), daily_count=sum(unq_catch)*1000) %>%
-      print()
+      # We can check to make sure these numbers aren't crazy by comparing to the Chilko fence count
+      chilko <- c("Chilko Combined", "Chilko (S)", "Chilko (ES)")                                                                                                   # Create vector of Chilko CUs to call later
+      chilko_dailycatch <- data %>% 
+        select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, run, current_speed_mps) %>%
+        filter(trap_type =="RST", CU_final %in% chilko) %>%                                                                                                         # Just RST and Chilko fish
+        group_by(date, USID) %>%                                                                                                                                    # Group by date and sampling event
+        summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), run_time_s=unique(run_time_s), current=unique(current_speed_mps, na.rm=T)) %>%          # Create unique variables for # fish, run, run length, and current velocity
+        mutate(fished_vol = as.numeric(ifelse(run_time_s=="600", "1243.836", "1865.71"))) %>%                                                                       # Fill in volume fished for the 600 and 900 s runs
+        mutate(bay_width = 440/3) %>%                                                                                                                               # Total river width is 440m therefore bay width is 440/3
+        mutate(bay_depth = 1.13) %>%                                                                                                                                # For now, Bay depth is RST depth (1.13m)
+        mutate(fish_m3 = unq_catch/fished_vol) %>%                                                                                                                  # Step 1: # fish/m3 (per run length)
+        mutate(bay_volume_m3s = bay_width*bay_depth*current*run_time_s) %>%                                                                                         # Step 2: Volume of water in the Bay for a whole run (bay area*current velocity*run length)
+        mutate(CPUE = fish_m3*bay_volume_m3s) %>%                                                                                                                   # Step 3: CPUE fish calculation (Step 1*Step 2)
+        group_by(date) %>%                                                                                                                                          # Regroup by date                
+        summarize(daily_CPUE = sum(CPUE)*100, daily_count=sum(unq_catch)*1000) %>%                                                                                  # Summarize the daily 'raw' number of fish and the daily CPUE
+        print()
+      
+      # Load Chilko fence data and reformat quickly 
+      chilko_fence <- read.csv("chilko_fence.csv")
+      chilko_fence <- chilko_fence %>%                                                   
+        rename(date = DATE,
+               daily_count_chilko = Daily.Count...Chilko,                            # Renaming columns for easy call in R 
+               daily_propn_chilko = Daily.Proportion...Chilko,
+               cuml_count_chilko = Cumulative.Chilko.Total,
+               cuml_propn_chilko = X..Cumulative.Chilko) %>% 
+        mutate(date = lubridate::dmy(date))                                          # Convert date format to be yyyy-mm-dd
+      
+
+      # FIG 5. Daily count at Mission, daily count at Chilko, and CPUE 
+      ggplot() +
+        geom_line(data=chilko_fence, aes(x=date, y=daily_count_chilko, 
+                                         colour="Daily count at Chilko",                                                               # Colours and linetypes are categorial. Required for ggplot2 to create legend from different data series 
+                                         linetype = "Daily count at Chilko"), 
+                  size=1.5, alpha=0.4) +
+        geom_bar(data=chilko_dailycatch, aes(x=date, y=daily_count,
+                                             fill="Daily count at Mission (Chilko only)"), 
+                 stat="identity", colour="black", width=1, alpha=0.8) +
+        geom_line(data=chilko_dailycatch, aes(x=date, y=daily_CPUE,
+                                              colour="CPUE at Mission (Chilko only)",
+                                              linetype="CPUE at Mission (Chilko only)"), 
+                  size=2, alpha=0.7) +
+        scale_colour_manual("", values=c("Daily count at Chilko" = "gray40", 
+                                         "CPUE at Mission (Chilko only)" = "black")) +
+        scale_linetype_manual("", values=c("Daily count at Chilko" = 1,
+                                           "CPUE at Mission (Chilko only)" = 1)) +
+        scale_fill_manual("", values=c("Daily count at Mission (Chilko only)" = "gray40")) +
+        scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
+        scale_y_continuous(labels=comma, sec.axis = sec_axis(~.,                                                                       # Secondary axis call
+                                                             name = "CPUE at Mission (*100) and \n Daily count at Mission (*1000)", 
+                                                             breaks = seq(0,3000000, by=600000), 
+                                                             labels = comma)) +
+        theme_bw() +
+        theme(text = element_text(colour="black", size=12),
+              plot.margin=margin(t=10,r=10,b=2,l=2),
+              panel.background = element_rect(fill = "white", colour = "black", size=2),
+              panel.grid.minor = element_line(colour = "transparent"),
+              panel.grid.major = element_line(colour = "transparent"),
+              plot.background = element_rect(fill = "transparent"),
+              axis.ticks = element_line(size=1.2),
+              axis.ticks.length = unit(0.5, "line"),
+              axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=20), face="bold", size=30),
+              axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=5), face="bold", size=30),
+              axis.text.y = element_text(colour="black", size=25),
+              axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
+              axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+              legend.text = element_text(size=25),
+              legend.position = c(0.68,0.87),
+              legend.background = element_blank(),
+              legend.box.background = element_rect(colour = "black"),
+              legend.spacing.y = unit(-3.5, "mm"),                                                                                    # Reduce extra white space around legend 
+              legend.key.height = unit(2, "line"),                                                                                    # Adjusts space between line series in legend 
+              legend.key.width = unit(2, "line")) +                                                                                   # Adjust width of line label in legend
+        guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch")) +                                                # Adjusts width of bar label in legend
+        ylab("Daily count at Chilko") +
+        xlab("Date")
+
+#########################################################################################################################################
     
-    chilko_fence <- read.csv("chilko_fence.csv")
+#                                                        CPUE + CU EXPANSIONS!! 
+    
+      
+# Next step would be to see how these CPUE calculations apply when counts by CU are expanded for sub-sampling ("CU expansions" as in
+# Townsend et al. 2017) 
+
+      
+##############
+#
+## FIRST calculate expansion factors as done previously 
+#
+##############
+      
+# DATA 1: Total number of fish caught, sampled and released daily 
+dailycatch <- data %>% 
+  select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, run, current_speed_mps) %>%
+  filter(trap_type =="RST", sockeye_smolt_total != "NR") %>% 
+  group_by(date, USID) %>%                                                                                                                # Group by date and USID
+  summarize(unq_run_time = unique(run_time_s), unq_vel = unique(current_speed_mps),                                                       # Summarize variables for run time, current velocity, number of SO caught, and number of SO released
+            unq_catch = unique(sockeye_smolt_total), unq_release = unique(sockeye_smolt_release)) %>% 
+  group_by(date, USID) %>%                                                                                                                # Group again by date and USID
+  summarize(sum_run_time = sum(unq_run_time), velocity = sum(unq_vel),                                                                    # Summarize the run time, current velocity, number of fish caught and number released, and add new column to calculate number sampled (caught - released) 
+            sum_SO = sum(unq_catch), sum_release = sum(unq_release), sum_sampled = sum_SO-sum_release) %>%
+  print()
+
+    # Also replace the one entry on Apr 6 where the fish was both sampled and released - for our purposes, it's a sampled fish so change sampled = 1 and unsampled = 1
+    dailycatch[49, 7] = 1                                                                         # Makes the "0" sampled into "1" sampled
+    dailycatch[49, 6] = 0                                                                         # Makes the "1" released into "0" released (for our purposes this fish was sampled because it has a GSID)
+    
+# DATA 2: original number of fish caught from each CU (just sampled fish) 
+dailysampled <- data %>% 
+  select(USID, date, trap_type, UFID, CU_final, run_time_s, run) %>%         
+  filter(trap_type == "RST", CU_final != "NA") %>%                                                # Select only RST catches, don't include entries where CU_final is "NA"
+  group_by(date, USID, CU_final) %>%                                                              # Group by date, USID and CU            
+  summarize(CU_n = n_distinct(UFID)) %>%                                                          # Summarize to count the number of sampled fish in each CU, for each sampling event
+  print()
+
+    # Join 'dailycatch' with 'dailysampled'
+    catch.sample.merge <- left_join(dailycatch, dailysampled, by=c("date", "USID"))               # Merge the overall catch summary data (dailycatch) with the specific CU data (dailysampled)               
+
+    
+# Create new column for proportion of SAMPLED fish belonging to CU 
+catch.sample.merge <- catch.sample.merge %>%
+  mutate(propn_obs = CU_n/sum_sampled)                                                            # Create a new column to determine the proportion of fish belonging to each CU (just sampled fish at this point) 
+
+# Calculate the expansion for SUBSAMPLED fish based on above proportion of sampled fish belonging to each CU
+catch.sample.merge <- catch.sample.merge %>% 
+  mutate(releasedxpropn = sum_release * propn_obs) %>%                                            # Create a new column "releasedxpropn" that expands the number of unsampled fish by the expansion factor to calculate the number of fish that needs to be added
+  mutate(n_CU_exp = CU_n + releasedxpropn) %>%                                                    # Create a new column that adds the expanded numbers to the original catch numbers
+  print()
+
+    # Replace the new NA's with the original numbers (no expansion factor was added so it produced an NA)
+    catch.sample.merge$n_CU_exp <- ifelse(is.na(catch.sample.merge$n_CU_exp), catch.sample.merge$sum_SO, catch.sample.merge$n_CU_exp)                # Again, some CUs didn't have expansion factors, so just replace NAs generated with their original abundances
+
+    
+# PAUSE FOR REFLECTION. 
+  # Now we have the number of expanded fish caught per day, per run (i.e., per sampling event), per CU (or not, including zero catches). 
+  # This is probably the finest scale catch data we could have. It would make sense to start here, with these expanded 'raw' catches to 
+  # then calculate CPUE. We would ultimately obtain the number of fish from each CU passing by at each sampling event (which I believe 
+  # is the goal). ** still for the RST trap only though :( ** 
+
+
+
+##############
+#
+## SECOND apply the previous CPUE calculations to these EXPANDED catches 
+#
+##############
+      
+# Expanded catches dataframe: catch.sample.merge 
+
+# Add CPUE calculation columns as above 
+CPUEexp <- catch.sample.merge %>% 
+  mutate(fished_vol = as.numeric(ifelse(sum_run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                        ifelse(sum_run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
+                                               ifelse(sum_run_time=="1080", "2238.905",
+                                                      ifelse(sum_run_time=="1140", "2363.288",
+                                                             ifelse(sum_run_time=="1200", "2487.672",
+                                                                    ifelse(sum_run_time=="1260", "2612.056",
+                                                                           ifelse(sum_run_time=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(fish_m3 = n_CU_exp/fished_vol) %>%                                                                                                               # Step 1: Calculate #fish/m3 (in x seconds)
+  mutate(bay_width = 440/3) %>%                                                                                                                           # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
+  mutate(bay_depth = 1.13) %>%                                                                                                                            # Bay depth for now is considered the RST fishing depth (1.13m)
+  mutate(bay_volume_m3 = bay_width*bay_depth*velocity*sum_run_time) %>%                                                                                   # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
+  mutate(CPUE = fish_m3*bay_volume_m3) %>%                                                                                                                # Step 3: CPUE fish abundance (Step 1*Step 2)                                        
+  print() 
+
+
+    # Use Chilko fence again as a check for this method
+    # Load Chilko fence data and reformat quickly 
+    chilko_fence <- read.csv("chilko_fence.csv")                                                    # Load in the Chilko fence data (csv extracted from Excel file)
+    
     chilko_fence <- chilko_fence %>% 
       rename(date = DATE,
-             daily_count_chilko = Daily.Count...Chilko,
+             daily_count_chilko = Daily.Count...Chilko,                                             # Rename columns for nice R handling
              daily_propn_chilko = Daily.Proportion...Chilko,
              cuml_count_chilko = Cumulative.Chilko.Total,
              cuml_propn_chilko = X..Cumulative.Chilko) %>% 
-      mutate(date = lubridate::dmy(date))
+        mutate(date = lubridate::dmy(date))                                                         # Reformat date to be yyyy-mm-dd
+      
+    # Subset the CPUEexp dataframe for just Chilko fish
+    chilko <- c("Chilko Combined", "Chilko (S)", "Chilko (ES)")                                     # Create vector of Chilko CUs to call later
     
-    # Join CPUE and chilko fence 
-    chilko.merge <- left_join(chilko_fence,chilko_dailycatch, by="date")
-    
-    # Plot 
+    chilko_CPUE <- CPUEexp %>% 
+      filter(CU_final %in% chilko) %>%                                                              # Selecting only Chilko CUs using above vector from the CPUEexp dataframe above
+      group_by(date) %>%                                                                            # Group these by date
+      summarize(daily_CPUE = sum(CPUE)*100) %>%                                                     # Summarize CPUE for each day (scale of comparison for Chilko fence data), and multiply by 100 to scale it for plotting
+      print()
+
+    #FIG 6. Daily count at Chilko and expanded CPUE for Chilko
     ggplot() +
       geom_line(data=chilko_fence, aes(x=date, y=daily_count_chilko, 
-                                       colour="Daily count at Chilko",
-                                       linetype = "Daily count at Chilko"), size=1.5) +
-      geom_bar(data=chilko_dailycatch, aes(x=date, y=daily_count,
-                                    fill="Daily count at Mission (Chilko only)"), stat="identity", colour="black", width=1, alpha=0.8) +
-      geom_line(data=chilko_dailycatch, aes(x=date, y=daily_CPUE,
-                                            colour="CPUE (Chilko only)",
-                                            linetype="CPUE (Chilko only)"), size=2) +
+                                       colour="Daily count at Chilko",                                                              # Colours and linetypes are categorical to facilitate creating a legend from plotting different data series
+                                       linetype = "Daily count at Chilko"), size=1.5, alpha=0.4) +
+      geom_line(data=chilko_CPUE, aes(x=date, y=daily_CPUE,
+                                            colour="CPUE at Mission (Chilko only)",
+                                            linetype="CPUE at Mission (Chilko only)"), size=2, alpha=0.7) +
       scale_colour_manual("", values=c("Daily count at Chilko" = "gray40", 
-                                       "CPUE (Chilko only)" = "black")) +
-      scale_linetype_manual("", values=c("Daily count at Chilko" = 3,
-                                         "CPUE (Chilko only)" = 1)) +
-      scale_fill_manual("", values=c("Daily count at Mission (Chilko only)" = "gray40")) +
+                                       "CPUE at Mission (Chilko only)" = "black")) +
+      scale_linetype_manual("", values=c("Daily count at Chilko" = 1,
+                                         "CPUE at Mission (Chilko only)" = 1)) +
       scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
-      scale_y_continuous(labels=comma, sec.axis = sec_axis(~., name = "CPUE and \n Daily count at Mission (*1000)", 
-                                             breaks = seq(0,3000000, by=600000), labels = comma)) +
+      scale_y_continuous(labels=comma, sec.axis = sec_axis(~., 
+                                                           name = "CPUE at Mission (*100)", 
+                                                           breaks = seq(0,3000000, by=600000), 
+                                                           labels = comma)) +
       theme_bw() +
       theme(text = element_text(colour="black", size=12),
-            plot.margin=margin(t=10,r=10,b=2,l=2),
-            panel.background = element_rect(fill = "white", colour = "black", size=2),
-            panel.grid.minor = element_line(colour = "transparent"),
-            panel.grid.major = element_line(colour = "transparent"),
-            plot.background = element_rect(fill = "transparent"),
-            axis.ticks = element_line(size=1.2),
-            axis.ticks.length = unit(0.5, "line"),
-            axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=20), face="bold", size=30),
-            axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=5), face="bold", size=30),
-            axis.text.y = element_text(colour="black", size=25),
-            axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
-            axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-            legend.text = element_text(size=25),
-            legend.position = c(0.7,0.85),
-            legend.background = element_blank(),
-            legend.box.background = element_rect(colour = "black"),
-            legend.spacing.y = unit(-3.5, "mm"), 
-            legend.key.height = unit(2, "line"),
-            legend.key.width = unit(2, "line")) +
-      guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch"))+
+              plot.margin=margin(t=10,r=10,b=2,l=2),
+              panel.background = element_rect(fill = "white", colour = "black", size=2),
+              panel.grid.minor = element_line(colour = "transparent"),
+              panel.grid.major = element_line(colour = "transparent"),
+              plot.background = element_rect(fill = "transparent"),
+              axis.ticks = element_line(size=1.2),
+              axis.ticks.length = unit(0.5, "line"),
+              axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=20), face="bold", size=30),
+              axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=5), face="bold", size=30),
+              axis.text.y = element_text(colour="black", size=25),
+              axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
+              axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+              legend.text = element_text(size=25),
+              legend.position = c(0.72,0.9),
+              legend.background = element_blank(),
+              legend.box.background = element_rect(colour = "black"),
+              legend.spacing.y = unit(-3.5, "mm"),                                                                                  # Removes some extra white space around legend
+              legend.key.height = unit(2, "line"),                                                                                  # Adds space between legend labels
+              legend.key.width = unit(2, "line")) +                                                                                 # Makes line label wider in legend
       ylab("Daily count at Chilko") +
       xlab("Date")
+
+
+
+#########################################################################################################################################
+
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+#                                              Raw catch over Vertical distance 
+
+
+##############
+#
+## FIRST using just normal catch  
+#
+##############
+      
+# Total number of fish caught, sampled and released daily 
+catch_dat <- data %>% 
+  select(USID, date, trap_type, depth_ft, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, current_speed_mps) %>%
+  filter(trap_type != "IPT", sockeye_smolt_total != "NR") %>% 
+  group_by(date, USID, trap_type, depth_ft) %>%                                                                                                              
+  summarize(unq_catch = unique(sockeye_smolt_total)) %>% 
+  group_by(date, trap_type, depth_ft) %>%                                                                                                              
+  summarize(sum_SO = sum(unq_catch)) %>%
+  print()
+
+unq <- data %>% 
+  group_by(USID, trap_type, depth_ft) %>% 
+  filter(trap_type != "IPT") %>%
+  summarize(n = n())
+
+depth <- data %>% 
+  group_by(USID,depth_ft) %>% 
+  summarize(unq_catch = unique(sockeye_smolt_total)) %>% 
+  group_by(depth_ft) %>% 
+  summarize(unq = sum(unq_catch, na.rm=T)) %>%
+  print()
+
+ggplot() +
+  geom_bar(data=unq, aes(x=depth_ft, y=n, group=depth_ft),stat="identity", pch=21,size=3, fill="black", colour="black", alpha=0.5) +
+  geom_point(data=catch_dat, aes(x=depth_ft, y=sum_SO), pch = 21, size=3, fill="red", colour="black", alpha=0.5) 
+
+
+# **** sampling effot is higher at the surface... think on this
+
+
+
+
+
+
+
+
+
+
+
