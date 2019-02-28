@@ -39,8 +39,8 @@ dailycatch <- data %>%
     
 # Number of fish caught in each CU (sampled fish) 
 dailysampled <- data %>% 
-  select(USID, date, trap_type, UFID, CU_final, run_time_min, run) %>% 
-  filter(trap_type == "RST", run_time_min =="15", CU_final != "", CU_final != "Unconfirmed") %>%          
+  select(USID, date, trap_type, UFID, CU_final, run_time_s, run) %>% 
+  filter(trap_type == "RST", CU_final != "NA") %>%          
   group_by(date, USID, CU_final) %>%                                                      
   summarize(CU_n = n_distinct(UFID)) %>% 
   print()
