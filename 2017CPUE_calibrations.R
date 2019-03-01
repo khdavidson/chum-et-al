@@ -595,7 +595,11 @@ CPUEexp <- catch.sample.merge %>%
 ## FIRST using just normal catch  
 #
 ##############
-      
+
+#########################################################################################  
+
+    # Decay curve fit tries 
+
 # Total number of fish caught, sampled and released daily 
 catch_dat <- data %>% 
   select(USID, date, trap_type, depth_ft, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, current_speed_mps) %>%
@@ -604,12 +608,17 @@ catch_dat <- data %>%
   summarize(unq_catch = unique(sockeye_smolt_total)) %>% 
   group_by(date, trap_type, depth_ft) %>%                                                                                                              
   summarize(sum_SO = sum(unq_catch)) %>%
+  ungroup() %>%
   print()
 
 unq <- data %>% 
   group_by(USID, trap_type, depth_ft) %>% 
   filter(trap_type != "IPT") %>%
-  summarize(n = n())
+  group_by(depth_ft) %>% 
+  summarize(n = n_distinct(USID)) %>% 
+  group_by(depth_ft) %>% 
+  summarize(sum=sum(n)) %>%
+  print()
 
 depth <- data %>% 
   group_by(USID,depth_ft) %>% 
@@ -618,12 +627,123 @@ depth <- data %>%
   summarize(unq = sum(unq_catch, na.rm=T)) %>%
   print()
 
-ggplot() +
-  geom_bar(data=unq, aes(x=depth_ft, y=n, group=depth_ft),stat="identity", pch=21,size=3, fill="black", colour="black", alpha=0.5) +
-  geom_point(data=catch_dat, aes(x=depth_ft, y=sum_SO), pch = 21, size=3, fill="red", colour="black", alpha=0.5) 
+# Fit exponential decay curve 
+  # Edit dataframe 
+  decay <- catch_dat %>% 
+    select(-c(date, trap_type)) %>% 
+    mutate(depth_m=ifelse(depth_ft=="0", "1",
+                   ifelse(depth_ft=="6", "1.8", "3.7")))%>%
+    mutate_at(vars(c(3)), funs(as.numeric)) %>%
+    group_by(depth_ft) %>% 
+    summarize(mean=mean(sum_SO)) %>%
+    print()
+  
+# Exponential decay function: y = a(1-b)x
+  # y: Final amount remaining after the decay over a period of time
+  # a: The original amount
+  # x: Time
+  # The decay factor is (1-b).
+  # The variable, b, is percent decrease in decimal form.
+
+# vector
+l = length(unique(decay$x))
+
+#loop
+x <- decay$x
+y <- decay$y
+unique_interval <- unique(interval_depths)
+num_interval <- length(unique_interval)
+interval_mean = vector()
+
+for(i in 1:num_interval){
+  interval_mean[i] = mean(decay[decay$x==unique_interval[i],]$y)
+}
+  
+accum_rate <- decay$sum_SO/decay$depth_m
+plot(decay$depth_ft, decay$mean)
+
+x.dummy=c(1:15)
+edar=800*(x.dummy)^-77
+lines(edar)
+plot.new()
+
+n1 <- nls(decay$mean~a*decay$depth_ft^b, start=list(a=44.5,b=1.3))
+  
+fit <- nls(mean ~ SSasymp(depth_ft, yf, y0, log_alpha), data = decay)
+
+ggplot(data=decay, aes(x=x, y=y)) +
+  #geom_bar(data=unq, aes(x=depth_ft, y=sum, group=depth_ft),stat="identity", size=3, fill="black", colour="black", alpha=0.5) +
+  geom_point(pch = 21, size=3, fill="red", colour="black", alpha=0.5) +
+  stat_function(fun = function(x) exp(fit2$coefficients[1] + x*fit2$coefficients[2]))
 
 
-# **** sampling effot is higher at the surface... think on this
+#########################################################################################  
+
+
+# Create a similar database as the RST above, but that includes all catches in both RST and VT traps 
+
+# Three step calculation:
+  # 1. Number of fish/m3 fished (in 900 s, but calculation allows for other run lengths)
+  # 2. Water volume in Bay (per 900 s, but calculation allows for other run lengths)
+  # 3. CPUE fish catch (1*2)
+
+RSTVT <- data %>% 
+  select(USID, date, trap_type, depth_ft, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, run, current_speed_mps) %>%
+  filter(trap_type !="IPT", sockeye_smolt_total != "NR") %>%                                                                                               # Omit IPT trap for now
+  group_by(date, USID, trap_type, depth_ft) %>%                                                                                                                                 # Group by date and sampling event
+  summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), 
+            run_time_s=unique(run_time_s), current=unique(current_speed_mps, na.rm=T)) %>%                                                                 # Create unique variables for number of fish, run, run length, and current velocity
+  mutate(fished_vol = as.numeric(ifelse(run_time_s=="600" & trap_type=="RST", "1243.836",
+                                 ifelse(run_time_s=="1020"& trap_type=="RST", "2114.521",                                                                             # Syntax is "run seconds", "fished volume"
+                                 ifelse(run_time_s=="1080"& trap_type=="RST", "2238.905",
+                                 ifelse(run_time_s=="1140"& trap_type=="RST", "2363.288",
+                                 ifelse(run_time_s=="1200"& trap_type=="RST", "2487.672",
+                                 ifelse(run_time_s=="1260"& trap_type=="RST", "2612.056",
+                                 ifelse(run_time_s=="1320"& trap_type=="RST", "2736.439", 
+                                  ifelse(run_time_s=="600" & trap_type=="Vertical", "545.95",
+                                  ifelse(run_time_s=="900" & trap_type=="Vertical", "818.92",
+                                  ifelse(run_time_s=="1020" & trap_type=="Vertical", "928.11",
+                                  ifelse(run_time_s=="1080" & trap_type=="Vertical", "982.70",
+                                  ifelse(run_time_s=="1140" & trap_type=="Vertical", "1037.30",
+                                  ifelse(run_time_s=="1200" & trap_type=="Vertical", "1091.891",
+                                  ifelse(run_time_s=="1260" & trap_type=="Vertical", "1146.49",
+                                  ifelse(run_time_s=="1320" & trap_type=="Vertical", "1201.08", "1865.71"))))))))))))))))) %>%                             # Nested ifelse() command to apply volume of water fished for each trap type and run length. There has got to be a better way to do this >:(
+  mutate(fish_m3 = unq_catch/fished_vol) %>%                                                                                                               # Step 1: Calculate # fish/m3 (in x seconds)
+  mutate(bay_width = 440/3) %>%                                                                                                                            # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
+  mutate(bay_depth = as.numeric(ifelse(trap_type=="Vertical", 1.01, 1.13))) %>%                                                                                                                             # Bay depth for now is considered the RST fishing depth (1.13m)
+  mutate(bay_volume_m3s = bay_width*bay_depth*current*run_time_s) %>%                                                                                      # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
+  mutate(CPUE = fish_m3*bay_volume_m3s) %>%                                                                                                                # Step 3: CPUE fish abundance (Step 1*Step 2)                                        
+  print()  
+
+
+
+
+# Total number of fish caught, sampled and released daily 
+catch_dat <- data %>% 
+  select(USID, trap_type, depth_ft, sockeye_smolt_total) %>%
+  filter(trap_type != "IPT", sockeye_smolt_total != "NR", sockeye_smolt_total != "NF", sockeye_smolt_total != "n/a") %>% 
+  group_by(USID, depth_ft) %>%                                                                                                              
+  summarize(unq_catch = unique(sockeye_smolt_total)) %>% 
+  group_by(depth_ft) %>%                                                                                                              
+  summarize(n_catch = sum(unq_catch), n_samples = n_distinct(USID)) %>%
+  mutate(mean_catch=n_catch/n_samples) %>%
+  print()
+
+    # On average, the surface traps caught 8.9x more fish than 6 ft, and 71.0x more fish at 12ft
+      # 6 ft trap caught 8.0x more fish than 12ft
+      # (comparison just RST and VT)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
