@@ -96,7 +96,7 @@ flow_dis <- data %>%
 
     
   # FIGURE 3: Plot current speed ~ date, current speed ~ time of day, current speed ~ discharge 
-  # Fig 3A
+  # Fig 1A
   date<-ggplot(flow, aes(fill=bay)) + 
     geom_point(aes(x=date, y=flow), pch=21, size=5) +
     scale_x_date(limits = as.Date(c("2017-04-03", "2017-06-14")), date_breaks = "7 day", date_labels = "%h %d") +
@@ -123,7 +123,8 @@ flow_dis <- data %>%
           legend.box.background = element_rect(colour = "black")) +
         xlab("Date") +
         ylab("")
-  # Fig 3B    
+  
+  # Fig 1B    
   flow$time <- as.POSIXct(strptime(flow$time, format="%k:%M:%S"))
   start<-ggplot(flow, aes(fill=bay)) + 
     geom_point(aes(x=time, y=flow), pch=21, size=5) +
@@ -168,7 +169,8 @@ flow_dis <- data %>%
           legend.position="none") +
     ylab("Current velocity (m/s)") +
     xlab("Time of day (24 hr)")
-  # Fig 3C
+  
+  # Fig 1C
   dcharge<-ggplot(flow_dis, aes(x=discharge, y=current, fill=bay)) +
     geom_point(pch=21, size=5) +
     scale_x_continuous(limits=c(1600,10000), breaks=seq(1600,10000, by=2000), labels=seq(1600,10000,by=2000)) +
@@ -200,11 +202,9 @@ flow_dis <- data %>%
   grid.draw(rbind(ggplotGrob(date), ggplotGrob(start), ggplotGrob(dcharge), size="last"))
 
   
-#
-#  
-#### SEA LEVEL DATA 
-#
-#  
+###
+# Sea level data 
+###  
   
 # Download and extract tidal data from EC to examine Bay current velocity ~ tide height
 sealvl <- read.csv("7654-ALL-2017_slev.csv")                # Sea level data for April at New Westminster (Stn # 7654) 
@@ -240,6 +240,7 @@ lvl.merge <- inner_join(data2, sealvl, by=c("date", "time", "datetime"))
 flow$date <- as.Date(flow$date)
 flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "datetime", "run"))
 
+  
   #Fig 4A
   flow.lvl.merge$datetime <- as.POSIXct(as.character(flow.lvl.merge$datetime),format = "%Y-%m-%d %H:%M:%S")
   
@@ -270,7 +271,8 @@ flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "dateti
           legend.box.background = element_rect(colour = "black")) +
     ylab("Sea level (m)") +
     xlab("Date and time (24 hr)") 
-
+  
+  # FIG 4B 
   sea_vel<-ggplot(flow.lvl.merge, aes(fill=bay)) +                           # Not super informative - trends obviously more driven by discharge than tide apparently
     geom_point(aes(x=sea_level_m, y=flow), pch=21, size=5) +
     scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"), name="", 
@@ -296,7 +298,6 @@ flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "dateti
   grid.newpage()
   grid.draw(rbind(ggplotGrob(sea), ggplotGrob(sea_vel),size="last"))
   
-
 # Given these plots, we can see that current velocity varies considerably by: 
     # Bay: Bay 6 current velocity is significantly higher than Bays 2 and 11. But Bays 2 and 11 do not differ significantly in current velocity
     # Date: Current velocity increases over time, due to increasing discharge. This increase is not proportional for all Bays: Bay 6 current velocity increases much more than Bays 2 and 11 over time.
@@ -313,22 +314,22 @@ flow.lvl.merge <- left_join(flow, lvl.merge, by=c("date", "time", "bay", "dateti
 #########################################################################################################################################
   
   
-####################
-#
-# NEXT,
+
 # CALIBRATE CATCH USING CSA/WATER VOLUME FISHED 
-#     RECALL, current varies:
-#       Intra-annually                (~Date, due to discharge)
-#       Over the course of a day      (~Time, due to tide)
-#       Over the course of date-time  (~Date-time, due to tide)
-#       Horizontally                  (~Date-run, due to shoreline effects)
-#     This is at the run scale so dont need to account for sampling time (unless scaled up to daily CPUE)
-# 
-####################  
+  # RECALL, current varies:
+    # Intra-annually                (~Date, due to discharge)
+    # Over the course of a day      (~Time, due to tide)
+    # Over the course of date-time  (~Date-time, due to tide)
+    # Horizontally                  (~Date-run, due to shoreline effects)
+  # This is at the run scale so dont need to account for sampling time (unless scaled up to daily CPUE)
+  
+  
 
-      
-## USING JUST RST VOLUME AND BAY CSA/DISCHARGE
+                                  #######################################################################      
+                                  #         1. RST, Depth=1.13, Not expanded for subsampling           #
+                                  #######################################################################   
 
+  
 # Three step calculation:
   # 1. Number of fish/m3 fished (in 900 s, but calculation allows for other run lengths)
   # 2. Water volume in Bay (per 900 s, but calculation allows for other run lengths)
@@ -354,7 +355,7 @@ CPUEdailycatch <- data %>%
   print()    
   
 
-      # We can check to make sure these numbers aren't crazy by comparing to the Chilko fence count
+      # CHILKO CHECK
       chilko <- c("Chilko Combined", "Chilko (S)", "Chilko (ES)")                                                                                                   # Create vector of Chilko CUs to call later
       chilko_dailycatch <- data %>% 
         select(USID, date, trap_type, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, run, current_speed_mps) %>%
@@ -430,20 +431,19 @@ CPUEdailycatch <- data %>%
         ylab("Daily count at Chilko") +
         xlab("Date")
 
-#########################################################################################################################################
-    
-#                                                        CPUE + CU EXPANSIONS!! 
-    
+
       
+                                  #######################################################################      
+                                  #           2. RST, Depth=1.13, expanded for subsampling              #
+                                  #######################################################################   
+ 
+
 # Next step would be to see how these CPUE calculations apply when counts by CU are expanded for sub-sampling ("CU expansions" as in
 # Townsend et al. 2017) 
 
-      
-##############
-#
+####
 ## FIRST calculate expansion factors as done previously 
-#
-##############
+####
       
 # DATA 1: Total number of fish caught, sampled and released daily 
 dailycatch <- data %>% 
@@ -487,19 +487,15 @@ catch.sample.merge <- catch.sample.merge %>%
     catch.sample.merge$n_CU_exp <- ifelse(is.na(catch.sample.merge$n_CU_exp), catch.sample.merge$sum_SO, catch.sample.merge$n_CU_exp)                # Again, some CUs didn't have expansion factors, so just replace NAs generated with their original abundances
 
     
-# PAUSE FOR REFLECTION. 
-  # Now we have the number of expanded fish caught per day, per run (i.e., per sampling event), per CU (or not, including zero catches). 
+# Now we have the number of expanded fish caught per day, per run (i.e., per sampling event), per CU (or not, including zero catches). 
   # This is probably the finest scale catch data we could have. It would make sense to start here, with these expanded 'raw' catches to 
   # then calculate CPUE. We would ultimately obtain the number of fish from each CU passing by at each sampling event (which I believe 
   # is the goal). ** still for the RST trap only though :( ** 
 
 
-
-##############
-#
+####
 ## SECOND apply the previous CPUE calculations to these EXPANDED catches 
-#
-##############
+####
       
 # Expanded catches dataframe: catch.sample.merge 
 
@@ -520,7 +516,7 @@ CPUEexp <- catch.sample.merge %>%
   print() 
 
 
-    # Use Chilko fence again as a check for this method
+    # CHILKO CHECK
     # Load Chilko fence data and reformat quickly 
     chilko_fence <- read.csv("chilko_fence.csv")                                                    # Load in the Chilko fence data (csv extracted from Excel file)
     
@@ -584,115 +580,80 @@ CPUEexp <- catch.sample.merge %>%
 
 
 
-#########################################################################################################################################
 
-    
-#                                              Raw catch over Vertical distance 
+            ###################################################################################################################      
+            #      3. RST and VT-0, Depth=1.13 and 1.01, Expanded for subsampling, Scaling factor applied to 6’ and 12’       #
+            ###################################################################################################################   
 
+##                   STILL IN PROGRESS
 
-##############
-#
-## FIRST using just normal catch  
-#
-##############
-
-#########################################################################################  
-
-    # Decay curve fit tries 
+####
+## FIRST re-calculate expansions for each CU, trap type, depth, etc. to account for sub-sampling. 
+####
 
 # Total number of fish caught, sampled and released daily 
-catch_dat <- data %>% 
-  select(USID, date, trap_type, depth_ft, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, current_speed_mps) %>%
-  filter(trap_type != "IPT", sockeye_smolt_total != "NR") %>% 
-  group_by(date, USID, trap_type, depth_ft) %>%                                                                                                              
-  summarize(unq_catch = unique(sockeye_smolt_total)) %>% 
-  group_by(date, trap_type, depth_ft) %>%                                                                                                              
-  summarize(sum_SO = sum(unq_catch)) %>%
-  ungroup() %>%
+m3_dailycatch <- data %>% 
+  select(USID, date, trap_type, depth_ft, run, bay, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, run, current_speed_mps) %>%
+  filter(sockeye_smolt_total != "NR") %>% 
+  group_by(date, USID, trap_type, depth_ft, run, bay) %>%                                                                                                                # Group by date and USID
+  summarize(unq_run_time = unique(run_time_s), unq_vel = unique(current_speed_mps),                                                       # Summarize variables for run time, current velocity, number of SO caught, and number of SO released
+            unq_catch = unique(sockeye_smolt_total), unq_release = unique(sockeye_smolt_release)) %>% 
+  group_by(date, USID, trap_type, depth_ft, run, bay) %>%                                                                                                                # Group again by date and USID
+  summarize(sum_run_time = sum(unq_run_time), velocity = sum(unq_vel),                                                                    # Summarize the run time, current velocity, number of fish caught and number released, and add new column to calculate number sampled (caught - released) 
+            sum_SO = sum(unq_catch), sum_release = sum(unq_release), sum_sampled = sum_SO-sum_release) %>%
   print()
 
-unq <- data %>% 
-  group_by(USID, trap_type, depth_ft) %>% 
-  filter(trap_type != "IPT") %>%
-  group_by(depth_ft) %>% 
-  summarize(n = n_distinct(USID)) %>% 
-  group_by(depth_ft) %>% 
-  summarize(sum=sum(n)) %>%
+    # Also replace the one entry on Apr 6 where the fish was both sampled and released - for our purposes, it's a sampled fish so change sampled = 1 and unsampled = 1
+    m3_dailycatch[120, 11] = 1                                                                         # Makes the "0" sampled into "1" sampled
+    m3_dailycatch[120, 10] = 0                                                                         # Makes the "1" released into "0" released (for our purposes this fish was sampled because it has a GSID)
+    
+# DATA 2: original number of fish caught from each CU (just sampled fish) 
+m3_dailysampled <- data %>% 
+  select(USID, date, trap_type, depth_ft, UFID, CU_final, run_time_s, run, bay) %>%         
+  filter(CU_final != "NA") %>%                                                # Select only RST catches, don't include entries where CU_final is "NA"
+  group_by(date, USID, CU_final, trap_type, depth_ft, run, bay) %>%                                                              # Group by date, USID and CU            
+  summarize(CU_n = n_distinct(UFID)) %>%                                                          # Summarize to count the number of sampled fish in each CU, for each sampling event
   print()
 
-depth <- data %>% 
-  group_by(USID,depth_ft) %>% 
-  summarize(unq_catch = unique(sockeye_smolt_total)) %>% 
-  group_by(depth_ft) %>% 
-  summarize(unq = sum(unq_catch, na.rm=T)) %>%
+    # Join 'dailycatch' with 'dailysampled'
+    m3.cs.merge <- left_join(m3_dailycatch, m3_dailysampled, by=c("date", "USID", "trap_type", "depth_ft", "run", "bay"))               # Merge the overall catch summary data (dailycatch) with the specific CU data (dailysampled)               
+
+# Create new column for proportion of SAMPLED fish belonging to CU 
+m3.cs.merge <- m3.cs.merge %>%
+  mutate(propn_obs = CU_n/sum_sampled)                                                            # Create a new column to determine the proportion of fish belonging to each CU (just sampled fish at this point) 
+
+# Calculate the expansion for SUBSAMPLED fish based on above proportion of sampled fish belonging to each CU
+m3.cs.merge <- m3.cs.merge %>% 
+  mutate(releasedxpropn = sum_release * propn_obs) %>%                                            # Create a new column "releasedxpropn" that expands the number of unsampled fish by the expansion factor to calculate the number of fish that needs to be added
+  mutate(n_CU_exp = CU_n + releasedxpropn) %>%                                                    # Create a new column that adds the expanded numbers to the original catch numbers
   print()
 
-# Fit exponential decay curve 
-  # Edit dataframe 
-  decay <- catch_dat %>% 
-    select(-c(date, trap_type)) %>% 
-    mutate(depth_m=ifelse(depth_ft=="0", "1",
-                   ifelse(depth_ft=="6", "1.8", "3.7")))%>%
-    mutate_at(vars(c(3)), funs(as.numeric)) %>%
-    group_by(depth_ft) %>% 
-    summarize(mean=mean(sum_SO)) %>%
-    print()
-  
-# Exponential decay function: y = a(1-b)x
-  # y: Final amount remaining after the decay over a period of time
-  # a: The original amount
-  # x: Time
-  # The decay factor is (1-b).
-  # The variable, b, is percent decrease in decimal form.
+    # Replace the new NA's with the original numbers (no expansion factor was added so it produced an NA)
+    m3.cs.merge$n_CU_exp <- ifelse(is.na(m3.cs.merge$n_CU_exp), m3.cs.merge$sum_SO, m3.cs.merge$n_CU_exp)                # Again, some CUs didn't have expansion factors, so just replace NAs generated with their original abundances
 
-# vector
-l = length(unique(decay$x))
-
-#loop
-x <- decay$x
-y <- decay$y
-unique_interval <- unique(interval_depths)
-num_interval <- length(unique_interval)
-interval_mean = vector()
-
-for(i in 1:num_interval){
-  interval_mean[i] = mean(decay[decay$x==unique_interval[i],]$y)
-}
-  
-accum_rate <- decay$sum_SO/decay$depth_m
-plot(decay$depth_ft, decay$mean)
-
-x.dummy=c(1:15)
-edar=800*(x.dummy)^-77
-lines(edar)
-plot.new()
-
-n1 <- nls(decay$mean~a*decay$depth_ft^b, start=list(a=44.5,b=1.3))
-  
-fit <- nls(mean ~ SSasymp(depth_ft, yf, y0, log_alpha), data = decay)
-
-ggplot(data=decay, aes(x=x, y=y)) +
-  #geom_bar(data=unq, aes(x=depth_ft, y=sum, group=depth_ft),stat="identity", size=3, fill="black", colour="black", alpha=0.5) +
-  geom_point(pch = 21, size=3, fill="red", colour="black", alpha=0.5) +
-  stat_function(fun = function(x) exp(fit2$coefficients[1] + x*fit2$coefficients[2]))
+# Write into .csv 
+write.csv(m3.cs.merge, "mission_SO_expanded_CU_counts.csv", row.names = F)
+    
+# PAUSE FOR REFLECTION. 
+  # Now we have the number of expanded fish caught per day, per run (i.e., per sampling event), per CU (or not, including zero catches). 
+  # This is probably the finest scale catch data we could have. It would make sense to start here, with these expanded 'raw' catches to 
+  # then calculate CPUE. We would ultimately obtain the number of fish from each CU passing by at each sampling event (which I believe 
+  # is the goal). This dataframe includes all traps. 
 
 
-#########################################################################################  
+####
+## SECOND, use expanded catches dataframe (m3.cs.merge // mission_SO_expanded_CU_counts.csv) to calculate this CPUE 
+####    
 
+data_exp <- read.csv("mission_SO_expanded_CU_counts.csv")
 
-# Create a similar database as the RST above, but that includes all catches in both RST and VT traps 
-
-# Three step calculation:
-  # 1. Number of fish/m3 fished (in 900 s, but calculation allows for other run lengths)
-  # 2. Water volume in Bay (per 900 s, but calculation allows for other run lengths)
-  # 3. CPUE fish catch (1*2)
-
-RSTVT <- data %>% 
-  select(USID, date, trap_type, depth_ft, UFID, sockeye_smolt_total, sockeye_smolt_release, CU_final, run_time_s, run, current_speed_mps) %>%
-  filter(trap_type !="IPT", sockeye_smolt_total != "NR") %>%                                                                                               # Omit IPT trap for now
-  group_by(date, USID, trap_type, depth_ft) %>%                                                                                                                                 # Group by date and sampling event
-  summarize(unq_catch = unique(sockeye_smolt_total), run=unique(run), 
-            run_time_s=unique(run_time_s), current=unique(current_speed_mps, na.rm=T)) %>%                                                                 # Create unique variables for number of fish, run, run length, and current velocity
+# Calculating CPUE for each depth using trap depths as Bay depths (1.13m for RST, 1.01 for VT) 
+RSTVT <- data_exp %>% 
+  select(USID, date, run, bay, trap_type, depth_ft, sum_run_time, velocity, CU_final, n_CU_exp, sum_SO) %>%
+  filter(trap_type !="IPT") %>%                                                                                               # Omit IPT trap for now
+  group_by(date, USID, trap_type, depth_ft, run, bay, CU_final) %>%                                                                                                                                 # Group by date and sampling event
+  summarize(run_time_s=unique(sum_run_time), current=unique(velocity, na.rm=T), 
+            unq_catch = unique(sum_SO), unq_catch_exp = unique(n_CU_exp)) %>%                                                                 # Create unique variables for number of fish, run, run length, and current velocity
   mutate(fished_vol = as.numeric(ifelse(run_time_s=="600" & trap_type=="RST", "1243.836",
                                  ifelse(run_time_s=="1020"& trap_type=="RST", "2114.521",                                                                             # Syntax is "run seconds", "fished volume"
                                  ifelse(run_time_s=="1080"& trap_type=="RST", "2238.905",
@@ -716,22 +677,138 @@ RSTVT <- data %>%
   print()  
 
 
+    # Determine factor for catches at surface vs. 6 and 12 ft (RST vs. VT only)
+    scaling_fac <- data_exp %>%                                                           # Note R removes NR/NF and n/a values for the number of sockeye above in the original making of "data_exp" (which was "m3.cs.merge" before). Just know this when comparing to Excel file.
+      group_by(USID, depth_ft, n_CU_exp) %>% 
+      summarize(sampling_length = unique(sum_run_time)) %>% 
+      mutate(mean = sum_n_exp/n_events) %>% 
+      print()
+      
+        # On average, the surface traps caught 9.3x more fish than 6 ft, and 74.5x more fish at 12ft
+          # 6 ft trap caught 8.0x more fish than 12ft
+          # (comparison just RST and VT)
 
-
-# Total number of fish caught, sampled and released daily 
-catch_dat <- data %>% 
-  select(USID, trap_type, depth_ft, sockeye_smolt_total) %>%
-  filter(trap_type != "IPT", sockeye_smolt_total != "NR", sockeye_smolt_total != "NF", sockeye_smolt_total != "n/a") %>% 
-  group_by(USID, depth_ft) %>%                                                                                                              
-  summarize(unq_catch = unique(sockeye_smolt_total)) %>% 
-  group_by(depth_ft) %>%                                                                                                              
-  summarize(n_catch = sum(unq_catch), n_samples = n_distinct(USID)) %>%
-  mutate(mean_catch=n_catch/n_samples) %>%
+# Apply scaling factors to surface catches using ifelse() stack
+# First just RST and VT-0 added catches
+RSTVT0 <- RSTVT %>% 
+  filter(depth_ft=="0") %>% 
+  group_by(date, run, bay) %>% 
+  summarize(n_surface = sum(CPUE, na.rm=T)) %>% 
+  mutate(depth_ft=0) %>%
   print()
 
-    # On average, the surface traps caught 8.9x more fish than 6 ft, and 71.0x more fish at 12ft
-      # 6 ft trap caught 8.0x more fish than 12ft
-      # (comparison just RST and VT)
+# Next just VT-6 and -12 (don't need to add catches beacuse here we are just applying scaling factor to surface catches and not using
+  # observed catches)
+RSTVT612 <- RSTVT %>% 
+  filter(depth_ft != "0") %>% 
+  group_by(date, run, bay, depth_ft) %>% 
+  summarize(n_depth = 0) %>% 
+  print()
+
+# Join surface and depth frames 
+RSTVT_scale <- full_join(RSTVT0, RSTVT612, by=c("date", "run", "bay", "depth_ft"))
+
+# Create new unqiue DRB index  
+RSTVT_scale <- RSTVT_scale %>% 
+  select(-n_depth) %>%
+  mutate(DRB = paste(gsub("-", "", date), run, bay, sep="-")) %>% 
+  mutate(n_surface = ifelse(is.na(n_surface), 0, n_surface))
+
+# 
+
+RSTVT_scale2 <- RSTVT_scale %>% 
+  group_by(DRB, depth_ft) %>% 
+  mutate(scaled_cpue = as.numeric(ifelse(depth_ft==6, n_surface[depth_ft==0], n_surface)))
+
+
+for(i in 1:length(unique(RSTVT_scale$DRB))){
+  scaled_cpue <- ifelse(RSTVT_scale$depth_ft=="6", 
+                        RSTVT_scale[RSTVT_scale$depth_ft=="0",]$n_surface/9.3, 
+                        
+                      ifelse(RSTVT_scale$depth_ft=="12", 
+                             RSTVT_scale[RSTVT_scale$depth_ft=="0",]$n_surface/74.5,
+                        
+                         RSTVT_scale[RSTVT_scale$depth_ft=="0",]$n_surface))
+}
+
+RSTVT_scale$new <- scaled_cpue
+
+
+
+
+
+                                  #######################################################################      
+                                  #           4. RST, Depth=1.13, expanded for subsampling              #
+                                  #######################################################################   
+
+
+# Just doing as in #1 but with VT as well (just each trap's 'slice' of volume)
+data_exp <- read.csv("mission_SO_expanded_CU_counts.csv")
+
+# Calculating CPUE for each depth using trap depths as Bay depths (1.13m for RST, 1.01 for VT) 
+RSTVT <- data_exp %>% 
+  select(USID, date, run, bay, trap_type, depth_ft, sum_run_time, velocity, CU_final, n_CU_exp, sum_SO) %>%
+  filter(trap_type !="IPT") %>%                                                                                               # Omit IPT trap for now
+  group_by(date, USID, trap_type, depth_ft, run, bay, CU_final) %>%                                                                                                                                 # Group by date and sampling event
+  summarize(run_time_s=unique(sum_run_time), current=unique(velocity, na.rm=T), 
+            unq_catch = unique(sum_SO), unq_catch_exp = unique(n_CU_exp)) %>%                                                                 # Create unique variables for number of fish, run, run length, and current velocity
+  mutate(fished_vol = as.numeric(ifelse(run_time_s=="600" & trap_type=="RST", "1243.836",
+                                 ifelse(run_time_s=="1020"& trap_type=="RST", "2114.521",                                                                             # Syntax is "run seconds", "fished volume"
+                                 ifelse(run_time_s=="1080"& trap_type=="RST", "2238.905",
+                                 ifelse(run_time_s=="1140"& trap_type=="RST", "2363.288",
+                                 ifelse(run_time_s=="1200"& trap_type=="RST", "2487.672",
+                                 ifelse(run_time_s=="1260"& trap_type=="RST", "2612.056",
+                                 ifelse(run_time_s=="1320"& trap_type=="RST", "2736.439", 
+                                  ifelse(run_time_s=="600" & trap_type=="Vertical", "545.95",
+                                  ifelse(run_time_s=="900" & trap_type=="Vertical", "818.92",
+                                  ifelse(run_time_s=="1020" & trap_type=="Vertical", "928.11",
+                                  ifelse(run_time_s=="1080" & trap_type=="Vertical", "982.70",
+                                  ifelse(run_time_s=="1140" & trap_type=="Vertical", "1037.30",
+                                  ifelse(run_time_s=="1200" & trap_type=="Vertical", "1091.891",
+                                  ifelse(run_time_s=="1260" & trap_type=="Vertical", "1146.49",
+                                  ifelse(run_time_s=="1320" & trap_type=="Vertical", "1201.08", "1865.71"))))))))))))))))) %>%                             # Nested ifelse() command to apply volume of water fished for each trap type and run length. There has got to be a better way to do this >:(
+  mutate(fish_m3 = unq_catch_exp/fished_vol) %>%                                                                                                               # Step 1: Calculate # fish/m3 (in x seconds)
+  mutate(bay_width = 440/3) %>%                                                                                                                            # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
+  mutate(bay_depth = as.numeric(ifelse(trap_type=="Vertical", 1.01, 1.13))) %>%                                                                                                                             # Bay depth for now is considered the RST fishing depth (1.13m)
+  mutate(bay_volume_m3s = bay_width*bay_depth*current*run_time_s) %>%                                                                                      # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
+  mutate(CPUE = fish_m3*bay_volume_m3s)
+
+# Summarize by daily CPUE catch
+daily_RSTVT <- RSTVT %>% 
+  group_by(date, depth_ft) %>% 
+  summarize(daily_total_CPUE = sum(CPUE, na.rm=T)) %>% 
+  print()
+
+
+  #FIG 5  
+  daily_RSTVT$date <- as.Date(daily_RSTVT$date)
+  
+  ggplot() +
+    geom_line(data=daily_RSTVT, aes(x=date, y=daily_total_CPUE), size=2) +
+      scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
+      scale_y_continuous(breaks=seq(0,40000, by=10000), limits=c(0,40000), labels=comma) +
+      theme_bw() +
+      theme(text = element_text(colour="black", size=12),
+              plot.margin=margin(t=10,r=10,b=2,l=2),
+              panel.background = element_rect(fill = "white", colour = "black", size=2),
+              panel.grid.minor = element_line(colour = "transparent"),
+              panel.grid.major = element_line(colour = "transparent"),
+              plot.background = element_rect(fill = "transparent"),
+              axis.ticks = element_line(size=1.2),
+              axis.ticks.length = unit(0.5, "line"),
+              axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=20), face="bold", size=30),
+              axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=5), face="bold", size=30),
+              axis.text.y = element_text(colour="black", size=25),
+              axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
+              axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+              legend.text = element_text(size=25),
+              legend.position = "none") +                                                                                 # Makes line label wider in legend
+      ylab("Total CPUE") +
+      xlab("Date")
+
+  # Fig 6
+  ggplot() +
+    geom_bar(data=daily_RSTVT, aes(x=depth_ft,y=daily_total_CPUE), stat="identity")
 
 
 
