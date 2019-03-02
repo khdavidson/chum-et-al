@@ -775,7 +775,7 @@ RSTVT <- data_exp %>%
 
 # Summarize by daily CPUE catch
 daily_RSTVT <- RSTVT %>% 
-  group_by(date, depth_ft) %>% 
+  group_by(date) %>% 
   summarize(daily_total_CPUE = sum(CPUE, na.rm=T)) %>% 
   print()
 
@@ -805,10 +805,6 @@ daily_RSTVT <- RSTVT %>%
               legend.position = "none") +                                                                                 # Makes line label wider in legend
       ylab("Total CPUE") +
       xlab("Date")
-
-  # Fig 6
-  ggplot() +
-    geom_bar(data=daily_RSTVT, aes(x=depth_ft,y=daily_total_CPUE), stat="identity")
 
 
 
