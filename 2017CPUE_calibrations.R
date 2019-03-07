@@ -18,6 +18,7 @@ library(stringr)
 library(grid)
 library(gridExtra)
 library(scales)
+library(lubridate)
 
 # Need to make a new column for run time (sec) - the old one was derived from Basecamp tracks and might not be actually "true" - instead
 # convert the rounded run times (min) to represent run times in seconds. A coarse estimate, given the resolution is at the minute-level,
@@ -191,6 +192,7 @@ m1_df.join <- m1_df.join %>%
   distinct(date, .keep_all = T) %>%
   print()
 
+
 ####
 # FOURTH: PLOT. Fig 1.1. Chilko  
 ####
@@ -298,15 +300,15 @@ m2_CPUE <- data_exp %>%
     group_by(date, USID) %>% 
     summarize(sum_SO=unique(sum_SO), n_CU_exp=sum(n_CU_exp), IA=sum(IA)) %>%
     group_by(date) %>%
-    summarize(sum_SO = sum(sum_SO), n_CU_exp=sum(n_CU_exp)*1000, daily_total_IA=mean(IA)*100) %>%
+    summarize(sum_SO = sum(sum_SO), n_CU_exp=sum(n_CU_exp)*1000, daily_mean_IA=mean(IA)*1000, daily_total_IA=sum(IA)*100) %>%
     print()
 
 # Fill in missing days with 0
-ts.df <- data.frame(date=seq(ymd("2017-04-03"), ymd("2017-06-14"), by="day"), daily_total_IA=0)
+ts.df <- data.frame(date=seq(ymd("2017-04-03"), ymd("2017-06-14"), by="day"), daily_total_IA=0, daily_mean_IA=0)
 
 # Join 
 m2_1$date <- as.Date(m2_1$date)
-m2_df.join <- full_join(ts.df, m2_1, by=c("date", "daily_total_IA"))
+m2_df.join <- full_join(ts.df, m2_1, by=c("date", "daily_total_IA", "daily_mean_IA"))
 
 # Remove duplicates 
 m2_df.join <- m2_df.join %>%
@@ -330,24 +332,35 @@ chilko_fence <- chilko_fence %>%
 #Plot
 ggplot() +
   geom_line(data=chilko_fence, aes(x=date, y=daily_count_chilko, colour="Count at Chilko", linetype = "Count at Chilko"), 
+            size=1.6, alpha=0.6) +
+ #geom_point(data=chilko_fence, aes(x=date, y=daily_count_chilko, colour="Count at Chilko"), 
+ #           size=0.1, alpha=0.3) +
+  geom_line(data=m2_df.join, aes(x=date, y=daily_total_IA, colour= "Daily total estimate at Mission \n (Chilko only)",
+                                 linetype = "Daily total estimate at Mission \n (Chilko only)"), 
+            size=1.8, alpha=0.7) +
+  geom_line(data=m2_df.join, aes(x=date,y=daily_mean_IA, colour="Daily average estimate at Mission \n (Chilko only)", 
+                                 linetype="Daily average estimate at Mission \n (Chilko only)"), 
             size=1.8, alpha=0.8) +
-  geom_point(data=chilko_fence, aes(x=date, y=daily_count_chilko, colour="Count at Chilko"), 
-             size=0.1, alpha=0.3) +
-  geom_line(data=m2_df.join, aes(x=date,y=daily_total_IA, colour="Daily estimate at Mission \n (Chilko only)", 
-                            linetype="Daily estimate at Mission \n (Chilko only)"), 
-            size=1.8, alpha=0.8) +
-  geom_point(data=m2_df.join, aes(x=date, y=daily_total_IA, colour="Daily estimate at Mission \n (Chilko only)"), 
-             size=0.1, alpha=0.3) +
-  geom_bar(data=m2_df.join, aes(x=date, y=n_CU_exp, fill="Count at Mission (Chilko only)"), stat="identity", 
-           colour="black", width=1, alpha=0.6) +
+
+  #geom_point(data=m2_df.join, aes(x=date, y=daily_mean_IA, colour="Daily average estimate at Mission \n (Chilko only)"), 
+  #           size=0.1, alpha=0.3) +
+  
+
+  
+  #geom_bar(data=m2_df.join, aes(x=date, y=n_CU_exp, fill="Count at Mission (Chilko only)"), stat="identity", 
+  #         colour="black", width=1, alpha=0.6) +
+  
   scale_colour_manual("", values=c("Count at Chilko" = "gray40",
-                                   "Daily estimate at Mission \n (Chilko only)" = "blue")) +
+                                   "Daily average estimate at Mission \n (Chilko only)" = "blue",
+                                   "Daily total estimate at Mission \n (Chilko only)" = "black")) +
   scale_linetype_manual("", values=c("Count at Chilko" = 1,
-                                     "Daily estimate at Mission \n (Chilko only)" = 1)) +
-  scale_fill_manual("", values=c("Count at Mission (Chilko only)" = "gray40")) +
+                                     "Daily average estimate at Mission \n (Chilko only)" = 1,
+                                     "Daily total estimate at Mission \n (Chilko only)" = 1)) +
+  #scale_fill_manual("", values=c("Count at Mission (Chilko only)" = "gray40")) +
   scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
   scale_y_continuous(labels=comma, 
-                     sec.axis = sec_axis(~., name = "Total daily count at Mission (*1000)", breaks=seq(0,400000,by=400000), labels=comma)) +
+                     sec.axis = sec_axis(~., name = "Daily average estimate at Mission (*1000) and \n Daily total estimate at Mission (*100)", 
+                                         breaks=seq(0,3000000,by=750000), labels=comma)) +
   theme(text = element_text(colour="black", size=12),
               plot.margin=margin(t=100,r=10,b=2,l=2),
               panel.background = element_rect(fill = "white", colour = "black", size=2),
@@ -364,12 +377,12 @@ ggplot() +
               legend.text = element_text(size=25),
               legend.position = c(0.7,0.80),
               legend.background = element_blank(),
-              legend.box.background = element_rect(colour = "black"),
-              legend.spacing.y = unit(-4, "mm"),                                                                              
-              legend.key.height = unit(3, "line"),                                                                                    
+              legend.box.background = element_rect(colour = "black", fill="white"),
+              legend.spacing.y = unit(-5, "mm"),                                                                              
+              legend.key.height = unit(4, "line"),                                                                                    
               legend.key.width = unit(2, "line")) +                                                                                   
-  guides(fill=guide_legend(keywidth=0.35, keyheight=0.4, default.unit="inch")) +                                              
-  ylab("Daily count at Chilko and \n Average daily estimate at Mission") +
+ # guides(fill=guide_legend(keywidth=0.35, keyheight=0.04, default.unit="inch")) +                                              
+  ylab("Daily total count at Chilko") +
   xlab("Date")
 
     #FIG 2.2. Daily count at Chilko and expanded CPUE for Chilko
