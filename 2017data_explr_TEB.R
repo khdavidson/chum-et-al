@@ -559,7 +559,7 @@ final_date %>%
   group_by(CU_final) %>%                                                               # Then group by the remaining CUs
   summarize(sum = sum(new_sum)) %>%                                                    # Calculate a new variable ("sum") 
   arrange(desc(sum)) %>%                                                               # Arrange CUs in descending order of most abundant. Top 10: Chilko (S), Francois-Fraser (S), Chilko (ES), Chilko combo, Quesnel (S), Kamloops (S), Anderson-Seton (ES), Harrison U/S (L), Chilliwack (ES), Nahatlatch (ES)
-  filter(sum > 19)                                                                     # Filter out CUs with mroe than 19 fish (easy cut off just based on numbers of fish - Nahatlatch lowest with 19.5 fish)
+  filter(sum > 19)                                                                     # Filter out CUs with more than 19 fish (easy cut off just based on numbers of fish - Nahatlatch lowest with 19.5 fish)
 
 CU_10 <- c("Chilko (S)", "Francois-Fraser (S)", "Chilko (ES)", "Chilko combined", "Quesnel (S)", "Kamloops (S)",         
            "Anderson-Seton (ES)", "Harrison U/S (L)", "Chilliwack (ES)", "Nahatlatch (ES)")                         # Selecting the Top 10 CUs of interest
