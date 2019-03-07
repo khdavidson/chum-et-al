@@ -333,30 +333,18 @@ chilko_fence <- chilko_fence %>%
 ggplot() +
   geom_line(data=chilko_fence, aes(x=date, y=daily_count_chilko, colour="Count at Chilko", linetype = "Count at Chilko"), 
             size=1.6, alpha=0.6) +
- #geom_point(data=chilko_fence, aes(x=date, y=daily_count_chilko, colour="Count at Chilko"), 
- #           size=0.1, alpha=0.3) +
   geom_line(data=m2_df.join, aes(x=date, y=daily_total_IA, colour= "Daily total estimate at Mission \n (Chilko only)",
                                  linetype = "Daily total estimate at Mission \n (Chilko only)"), 
             size=1.8, alpha=0.7) +
   geom_line(data=m2_df.join, aes(x=date,y=daily_mean_IA, colour="Daily average estimate at Mission \n (Chilko only)", 
                                  linetype="Daily average estimate at Mission \n (Chilko only)"), 
             size=1.8, alpha=0.8) +
-
-  #geom_point(data=m2_df.join, aes(x=date, y=daily_mean_IA, colour="Daily average estimate at Mission \n (Chilko only)"), 
-  #           size=0.1, alpha=0.3) +
-  
-
-  
-  #geom_bar(data=m2_df.join, aes(x=date, y=n_CU_exp, fill="Count at Mission (Chilko only)"), stat="identity", 
-  #         colour="black", width=1, alpha=0.6) +
-  
   scale_colour_manual("", values=c("Count at Chilko" = "gray40",
                                    "Daily average estimate at Mission \n (Chilko only)" = "blue",
                                    "Daily total estimate at Mission \n (Chilko only)" = "black")) +
   scale_linetype_manual("", values=c("Count at Chilko" = 1,
                                      "Daily average estimate at Mission \n (Chilko only)" = 1,
                                      "Daily total estimate at Mission \n (Chilko only)" = 1)) +
-  #scale_fill_manual("", values=c("Count at Mission (Chilko only)" = "gray40")) +
   scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
   scale_y_continuous(labels=comma, 
                      sec.axis = sec_axis(~., name = "Daily average estimate at Mission (*1000) and \n Daily total estimate at Mission (*100)", 
@@ -381,50 +369,140 @@ ggplot() +
               legend.spacing.y = unit(-5, "mm"),                                                                              
               legend.key.height = unit(4, "line"),                                                                                    
               legend.key.width = unit(2, "line")) +                                                                                   
- # guides(fill=guide_legend(keywidth=0.35, keyheight=0.04, default.unit="inch")) +                                              
   ylab("Daily total count at Chilko") +
   xlab("Date")
 
-    #FIG 2.2. Daily count at Chilko and expanded CPUE for Chilko
+
+
+####
+# FOURTH: Cumulative run timing methods comparison
+####
+# Overall df
+m2_cuml <- data_exp %>% 
+  filter(trap_type == "RST") %>% 
+  mutate(fished_vol = as.numeric(ifelse(sum_run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                 ifelse(sum_run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
+                                 ifelse(sum_run_time=="1080", "2238.905",
+                                 ifelse(sum_run_time=="1140", "2363.288",
+                                 ifelse(sum_run_time=="1200", "2487.672",
+                                 ifelse(sum_run_time=="1260", "2612.056",
+                                 ifelse(sum_run_time=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(CPUE_fish_m3 = n_CU_exp/fished_vol) %>%                                                                                                               # Step 1: Calculate #fish/m3 (in x seconds)
+  mutate(bay_width = 440/3) %>%                                                                                                                           # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
+  mutate(bay_depth = 1.13) %>%                                                                                                                            # Bay depth for now is considered the RST fishing depth (1.13m)
+  mutate(bay_volume_m3 = bay_width*bay_depth*velocity*sum_run_time) %>%                                                                                   # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
+  mutate(IA = CPUE_fish_m3*bay_volume_m3) %>%                                                                                                                # Step 3: CPUE fish abundance (Step 1*Step 2)                                        
+  print() 
+
+# 1. Summarize by sampling event
+m2_cuml_day <- m2_cuml %>% 
+  group_by(date, USID, CU_final) %>% 
+  summarize(sum_SO=unique(sum_SO), n_CU_exp=sum(n_CU_exp), IA=sum(IA))
+
+    # Replace NAs with text n/a so easier to filter
+    #m2_cuml_day$CU_final <- as.character(m2_cuml_day$CU_final)
+    #m2_cuml_day$CU_final <- ifelse(is.na(m2_cuml_day$CU_final), "n/a", m2_cuml_day$CU_final)            
+
+# 2. Summarize by day 
+m2_cuml_day <- m2_cuml_day %>% 
+  group_by(date, CU_final) %>%
+  summarize(sum_SO = sum(sum_SO), n_CU_exp=sum(n_CU_exp), daily_mean_IA=mean(IA), daily_total_IA=sum(IA)) %>%
+  print() 
+
+# 3. Determine total number fish in each CU 
+CU_totals <- m2_cuml_day %>% 
+  group_by(CU_final) %>%                                                                   
+  summarize(CU_total_n = sum(n_CU_exp), CU_total_IA = sum(daily_total_IA)) %>%                                                   
+  print()
+
+# 4. Join, make new column to divide daily # each CU by CU total   
+CU.total.merge <- left_join(m2_cuml_day, CU_totals, by="CU_final")                           
+
+final_date <- CU.total.merge %>% 
+  mutate(daily_perc_n=n_CU_exp/CU_total_n, daily_perc_IA=daily_total_IA/CU_total_IA) %>%                                                 
+  print()
+
+# 5. Calculate cumulative proportions 
+final_date_cuml <- final_date %>% 
+  group_by(CU_final) %>%                                                               
+  mutate(cuml_n = cumsum(n_CU_exp), cuml_IA=cumsum(CU_total_IA),
+         cuml_propn_n=cumsum(daily_perc_n), cuml_propn_IA=cumsum(daily_perc_IA)) %>%
+  print()
+
+# 6. Just choose top 7 CUs 
+top_7 <- c("Chilko (S)", "Francois-Fraser (S)", "Chilko (ES)", "Chilko Combined", "Quesnel (S)")
+final_date_cuml_7 <- final_date_cuml %>% 
+  filter(CU_final %in% top_7) %>%                                                               
+  print()
+
+# 7. Find migration timing info 
+dates <- final_date_cuml_7 %>% 
+  group_by(CU_final) %>%                                                                   
+  summarize(first = min(date), last = max(date))  %>%                                     
+  print()
+
+# PLOT: Fig 2.2a
+final_date_cuml_7$date <- as.Date(final_date_cuml_7$date)
+
+ggplot() +
+  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
+  geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, group=CU_final, colour=CU_final), linetype=2, size=2, alpha=0.4) +
+  geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, fill=CU_final),colour="black", size=4, pch=21, alpha=0.4) +
+  geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, group=CU_final, colour=CU_final), size=2) +
+  geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, fill=CU_final),colour="black", size=4, pch=21) +
+  scale_x_date(date_breaks = "3 day", date_labels = ("%m-%d")) +
+  scale_colour_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +                 # dark blue, aquamarine, pink, green, orange
+  scale_fill_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +
+  theme(text = element_text(colour="black", size=12),
+        plot.margin=margin(t=10,r=25,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=25),
+        legend.title = element_text(size=30, face="bold"),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.80,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("Cumulative proportion") +
+  xlab("Date") 
+
+
+    # PLOT: Fig 2.2b - zoomed in at messy intersecting point
+    final_date_cuml_7$date <- as.Date(final_date_cuml_7$date)
+    
     ggplot() +
-      geom_line(data=chilko_fence, aes(x=date, y=daily_count_chilko, 
-                                       colour="Daily count at Chilko",                                                              # Colours and linetypes are categorical to facilitate creating a legend from plotting different data series
-                                       linetype = "Daily count at Chilko"), size=1.5, alpha=0.4) +
-      geom_line(data=chilko_CPUE, aes(x=date, y=daily_CPUE,
-                                            colour="CPUE at Mission (Chilko only)",
-                                            linetype="CPUE at Mission (Chilko only)"), size=2, alpha=0.7) +
-      scale_colour_manual("", values=c("Daily count at Chilko" = "gray40", 
-                                       "CPUE at Mission (Chilko only)" = "black")) +
-      scale_linetype_manual("", values=c("Daily count at Chilko" = 1,
-                                         "CPUE at Mission (Chilko only)" = 1)) +
-      scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
-      scale_y_continuous(labels=comma, sec.axis = sec_axis(~., 
-                                                           name = "CPUE at Mission (*100)", 
-                                                           breaks = seq(0,3000000, by=600000), 
-                                                           labels = comma)) +
-      theme_bw() +
-      theme(text = element_text(colour="black", size=12),
-              plot.margin=margin(t=10,r=10,b=2,l=2),
+      geom_hline(aes(yintercept=0.5), linetype="dotted", colour="black", size=2) +
+      geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, group=CU_final, colour=CU_final), linetype=2, size=3, alpha=0.7) +
+      geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, fill=CU_final),colour="black", size=5, pch=21, alpha=0.7) +
+      geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, group=CU_final, colour=CU_final), size=3) +
+      geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, fill=CU_final),colour="black", size=5, pch=21) +
+      scale_x_date(limits=as.Date(c("2017-05-04", "2017-05-08")), date_breaks = "1 day", date_labels = ("%m-%d")) +
+      scale_y_continuous(limits=c(0.10,0.90), breaks=seq(0.10,0.90, by=0.2))+
+      scale_colour_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +                 # dark blue, aquamarine, pink, green, orange
+      scale_fill_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +
+      theme(text = element_text(colour="black", size=45),
+              plot.margin=margin(t=10,r=10,b=0,l=10),
               panel.background = element_rect(fill = "white", colour = "black", size=2),
               panel.grid.minor = element_line(colour = "transparent"),
               panel.grid.major = element_line(colour = "transparent"),
               plot.background = element_rect(fill = "transparent"),
               axis.ticks = element_line(size=1.2),
               axis.ticks.length = unit(0.5, "line"),
-              axis.title.y.right = element_text(margin=margin(t=0,r=0,b=0,l=20), face="bold", size=30),
-              axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=5), face="bold", size=30),
-              axis.text.y = element_text(colour="black", size=25),
-              axis.title.x = element_text(margin=margin(t=15,r=0,b=2,l=0), face="bold", size=30),
-              axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-              legend.text = element_text(size=25),
-              legend.position = c(0.72,0.9),
-              legend.background = element_blank(),
-              legend.box.background = element_rect(colour = "black"),
-              legend.spacing.y = unit(-3.5, "mm"),                                                                                  # Removes some extra white space around legend
-              legend.key.height = unit(2, "line"),                                                                                  # Adds space between legend labels
-              legend.key.width = unit(2, "line")) +                                                                                 # Makes line label wider in legend
-      ylab("Daily count at Chilko") +
-      xlab("Date")
+              axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=0), face="bold", size=30),
+              axis.text.y = element_text(colour="black", size=45),
+              axis.title.x = element_text(margin=margin(t=15,r=0,b=10,l=0), face="bold", size=30),
+              axis.text.x = element_text(colour="black", angle=45, hjust=1, size=45),
+            legend.position = "none") +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+      ylab("") +
+      xlab("") 
+
 
 
 
