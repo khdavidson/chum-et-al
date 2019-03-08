@@ -104,23 +104,6 @@ data_exp <- read.csv("mission_SO_expanded_CU_counts.csv")                       
 ##############################################################################################################################
 
 
-# FILLING IN MISSING DAYS WITH 0
-# Create a time series
-ts.df <- data.frame(date=seq(ymd("2017-04-03"), ymd("2017-06-14"), by="day"), IA_mean_day=0)
-
-# Join 
-m1_df.join <- full_join(ts.df, m1_df, by=c("date", "IA_mean_day"))
-
-# Remove duplicates 
-m1_df.join <- m1_df.join %>%
-  arrange(date,desc(IA_mean_day)) %>%
-  distinct(date, .keep_all = T) %>%
-  print()
-
-
-
-
-
 
 
 #                                                   THE FOLLOWING CODE CORRESPONDS TO
@@ -229,7 +212,6 @@ chilko_fence <- chilko_fence %>%
          cuml_propn_chilko = X..Cumulative.Chilko) %>% 
   mutate(date = lubridate::dmy(date))
 
-
     #PLOT: Fig 1.1a CHILKO TEMPORAL NORMAL 
     ggplot() +
       geom_line(data=chilko_fence, aes(x=date, y=daily_count_chilko, colour="Count at Chilko", linetype = "Count at Chilko"), 
@@ -275,7 +257,6 @@ chilko_fence <- chilko_fence %>%
       xlab("Date")
 
 
-
 ########### CHILKO CUMULATIVE
 
 ####
@@ -312,7 +293,6 @@ chilko_fence <- chilko_fence %>%
   mutate(date = lubridate::dmy(date)) %>% 
   select(-c(3,5)) %>% 
   mutate(cuml_propn_chilko = cuml_count_chilko/sum(daily_count_chilko))
-
 
     #PLOT: Fig 1.1b CHILKO TEMPORAL CUMULATIVE
     ggplot() +
@@ -383,7 +363,6 @@ m1_CPUE <- data_exp %>%
   mutate_at(vars(c(12)), funs(as.character)) %>%
   print()
 
-
 ####
 # 2. Create the dataframe where abundance estimates will be calculated
 ####
@@ -406,7 +385,6 @@ m1_avgCPUE <- m1_CPUE %>%
 m1_avgCPUE$date <- as.Date(m1_avgCPUE$date)
 m1_df <- left_join(m1_avgCPUE, discharge, by = "date")
 
-
 ####
 # 3. Calculate abundance estimates
 ####
@@ -414,7 +392,6 @@ m1_df <- m1_df %>%
   group_by(date) %>%
   mutate(daily_IA = daily_mean_CPUE*daily_mean_discharge*sec_day) %>%  
   print()
-    
     
 ####
 # 4. Calculate cumulative data 
@@ -439,7 +416,6 @@ m1_df_cuml <- m1_df_cuml %>%
   mutate(cuml_n_propn = cuml_n/sum_n_exp, cuml_IA_propn = cuml_IA/sum_daily_IA) %>% 
   print()
     
-
 ####
 # 5. Choose top 5 and find migration timing info 
 ####
@@ -453,7 +429,6 @@ dates <- m1_df_cuml5 %>%
   group_by(CU_final) %>%                                                                   
   summarize(first = min(date), last = max(date))  %>%                                     
   print()
-
 
     #PLOT: Fig 1.2a ALL CUs CUMULATIVE
     ggplot() +
@@ -679,7 +654,6 @@ m2_df_cko_cuml <- m2_df_cko_cuml %>%
   mutate_at(c(2:3), funs(replace(., is.na(.), 0))) %>% 
   print()
 
-
 ####
 # 4. Calculate cumulative data 
 ####
@@ -799,7 +773,7 @@ m2_avgIA <- m2_IA %>%
   print()
      
 ####
-# 4. Calculate cumulative data 
+# 3. Calculate cumulative data 
 ####
 # Calculate cumulative values
 m2_df_cuml <- m2_avgIA %>%
@@ -821,9 +795,8 @@ m2_df_cuml <- m2_df_cuml %>%
   mutate(cuml_n_propn = cuml_n/sum_n_exp, cuml_IA_propn = cuml_IA/sum_daily_IA) %>% 
   print()
     
-
 ####
-# 5. Choose top 5 and find migration timing info 
+# 4. Choose top 5 and find migration timing info 
 ####
 top_5 <- c("Chilko (S)", "Francois-Fraser (S)", "Chilko (ES)", "Chilko Combined", "Quesnel (S)")
 m2_df_cuml5 <- m2_df_cuml %>% 
@@ -836,7 +809,6 @@ dates <- m2_df_cuml5 %>%
   group_by(CU_final) %>%                                                                   
   summarize(first = min(date), last = max(date))  %>%                                     
   print()
-        
         
     #PLOT: Fig 2.2a ALL CUs CUMULATIVE
     ggplot() +
@@ -924,182 +896,6 @@ dates <- m2_df_cuml5 %>%
 
 
 
-
-
-
-
-
-
-
-
-
-
-####
-# FOURTH: Cumulative run timing methods comparison
-####
-# Overall df
-m2_cuml <- data_exp %>% 
-  filter(trap_type == "RST") %>% 
-  mutate(fished_vol = as.numeric(ifelse(sum_run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
-                                 ifelse(sum_run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
-                                 ifelse(sum_run_time=="1080", "2238.905",
-                                 ifelse(sum_run_time=="1140", "2363.288",
-                                 ifelse(sum_run_time=="1200", "2487.672",
-                                 ifelse(sum_run_time=="1260", "2612.056",
-                                 ifelse(sum_run_time=="1320", "2736.439", "1865.71"))))))))) %>%
-  mutate(CPUE_fish_m3 = n_CU_exp/fished_vol) %>%                                                                                                               # Step 1: Calculate #fish/m3 (in x seconds)
-  mutate(bay_width = 440/3) %>%                                                                                                                           # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
-  mutate(bay_depth = 1.13) %>%                                                                                                                            # Bay depth for now is considered the RST fishing depth (1.13m)
-  mutate(bay_volume_m3 = bay_width*bay_depth*velocity*sum_run_time) %>%                                                                                   # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
-  mutate(IA = CPUE_fish_m3*bay_volume_m3) %>%                                                                                                                # Step 3: CPUE fish abundance (Step 1*Step 2)                                        
-  print() 
-
-# 1. Summarize by sampling event
-m2_cuml_day <- m2_cuml %>% 
-  group_by(date, USID, CU_final) %>% 
-  summarize(n_CU_exp=sum(n_CU_exp), IA=sum(IA))
-
-    # Replace NAs with text n/a so easier to filter
-    #m2_cuml_day$CU_final <- as.character(m2_cuml_day$CU_final)
-    #m2_cuml_day$CU_final <- ifelse(is.na(m2_cuml_day$CU_final), "n/a", m2_cuml_day$CU_final)            
-
-# 2. Summarize by day 
-m2_cuml_day <- m2_cuml_day %>% 
-  group_by(date, CU_final) %>%
-  summarize(n_CU_exp=sum(n_CU_exp), daily_mean_IA=mean(IA), daily_total_IA=sum(IA)) %>%
-  print() 
-
-# 3. Determine total number fish in each CU 
-CU_totals <- m2_cuml_day %>% 
-  group_by(CU_final) %>%                                                                   
-  summarize(CU_total_n = sum(n_CU_exp), CU_mean_IA=mean(daily_mean_IA), CU_total_IA = sum(daily_total_IA)) %>%                                                   
-  print()
-
-# 4. Join, make new column to divide daily # each CU by CU total   
-CU.total.merge <- left_join(m2_cuml_day, CU_totals, by="CU_final")                           
-
-final_date <- CU.total.merge %>% 
-  mutate(daily_perc_n=n_CU_exp/CU_total_n, 
-         daily_mean_perc_IA=daily_mean_IA/CU_total_IA, 
-         daily_total_perc_IA=daily_total_IA/CU_total_IA) %>%                                                 
-  print()
-
-# 5. Calculate cumulative proportions 
-final_date_cuml <- final_date %>% 
-  group_by(CU_final) %>%                                                               
-  mutate(cuml_propn_n=cumsum(daily_perc_n), 
-         cuml_propn_mean_IA=cumsum(daily_mean_perc_IA),
-         cuml_propn_total_IA=cumsum(daily_total_perc_IA)) %>%
-  print()
-
-# 6. Just choose top 7 CUs 
-top_7 <- c("Chilko (S)", "Francois-Fraser (S)", "Chilko (ES)", "Chilko Combined", "Quesnel (S)")
-final_date_cuml_7 <- final_date_cuml %>% 
-  filter(CU_final %in% top_7) %>%                                                               
-  print()
-
-# 7. Find migration timing info 
-dates <- final_date_cuml_7 %>% 
-  group_by(CU_final) %>%                                                                   
-  summarize(first = min(date), last = max(date))  %>%                                     
-  print()
-
-
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-    
-
-
-
-
-# PLOT: Fig 2.2/2.3a
-final_date_cuml_7$date <- as.Date(final_date_cuml_7$date)
-
-ggplot() +
-  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
-  
-  geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, group=CU_final, colour=CU_final), linetype=2, size=2, alpha=0.5) +
-  geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, fill=CU_final),colour="black", size=4, pch=21, alpha=0.4) +
-  
-  #geom_line(data=m1_final_date_cuml_5, aes(x=date, y=cuml_propn_IA, group=CU_final, colour=CU_final), size=2) +
-  #geom_point(data=m1_final_date_cuml_5, aes(x=date, y=cuml_propn_IA, fill=CU_final), size=4, pch=21) +
-  
-  geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, group=CU_final, colour=CU_final), size=2) +
-  geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, fill=CU_final),colour="black", size=4, pch=21) +
-  
-  scale_x_date(date_breaks = "4 day", date_labels = ("%h %d")) +
-  scale_colour_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +                 # dark blue, aquamarine, pink, green, orange
-  scale_fill_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +
-  theme(text = element_text(colour="black", size=12),
-        plot.margin=margin(t=10,r=25,b=0,l=10),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y.left = element_text(margin=margin(t=0,r=20,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-        legend.text = element_text(size=25),
-        legend.title = element_text(size=30, face="bold"),
-        legend.background = element_rect(fill="white", colour="black"),
-        legend.position = c(0.80,0.15),
-        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-  ylab("Cumulative proportion") +
-  xlab("Date") 
-
-
-    # PLOT: Fig 2.2b - zoomed in at messy 50% intersecting point
-    final_date_cuml_7$date <- as.Date(final_date_cuml_7$date)
-    
-    ggplot() +
-      geom_hline(aes(yintercept=0.5), linetype="dotted", colour="black", size=2) +
-      
-      geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, group=CU_final, colour=CU_final), linetype=2, size=3, alpha=0.55) +
-      geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_n, fill=CU_final),colour="black", size=5, pch=21, alpha=0.55) +
-      
-      geom_line(data=m1_final_date_cuml_5, aes(x=date, y=cuml_propn_IA, group=CU_final, colour=CU_final), size=3) +
-      geom_point(data=m1_final_date_cuml_5, aes(x=date, y=cuml_propn_IA, fill=CU_final), size=5, pch=21) +
-
-      
-   #   geom_line(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, group=CU_final, colour=CU_final), size=3) +
-    #  geom_point(data=final_date_cuml_7, aes(x=date, y=cuml_propn_IA, fill=CU_final),colour="black", size=5, pch=21) +
-      
-      scale_x_date(limits=as.Date(c("2017-05-05", "2017-05-08")), date_breaks = "1 day", date_labels = ("%h %d")) +
-      scale_y_continuous(limits=c(0.10,0.90), breaks=seq(0.10,0.90, by=0.2))+
-      scale_colour_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +                 # dark blue, aquamarine, pink, green, orange
-      scale_fill_manual(name="WSP Conservation Unit", values = c("#0c1cf2", "#4CF0F4", "#f95353", "#4ebf15", "#ff8d00")) +
-      theme(text = element_text(colour="black", size=45),
-              plot.margin=margin(t=15,r=15,b=0,l=0),
-              panel.background = element_rect(fill = "white", colour = "black", size=2),
-              panel.grid.minor = element_line(colour = "transparent"),
-              panel.grid.major = element_line(colour = "transparent"),
-              plot.background = element_rect(fill = "transparent"),
-              axis.ticks = element_line(size=1.2),
-              axis.ticks.length = unit(0.5, "line"),
-              axis.title.y.left = element_text(margin=margin(t=0,r=0,b=0,l=0), face="bold", size=30),
-              axis.text.y = element_text(colour="black", size=45),
-              axis.title.x = element_text(margin=margin(t=0,r=0,b=0,l=0), face="bold", size=30),
-              axis.text.x = element_text(colour="black", angle=45, hjust=1, size=45),
-            legend.position = "none") +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-      ylab("") +
-      xlab("") 
-
-
-
-  
-  
-
-  
-  
-  
-  
-  
-  
-  
 
 
 
