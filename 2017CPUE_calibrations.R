@@ -230,7 +230,7 @@ chilko_fence <- chilko_fence %>%
       scale_linetype_manual("", values=c("Count at Chilko" = 1,
                                          "Daily abundance estimate at Mission \n (Chilko only)" = 1)) +
       scale_fill_manual("", values=c("Count at Mission (Chilko only)" = "black")) +
-      scale_x_date(date_breaks = "5 day", date_labels = "%h-%d") +
+      scale_x_date(date_breaks = "5 day", date_labels = "%h %d") +
       scale_y_continuous(labels=comma, 
                          sec.axis = sec_axis(~., name = "Total daily count at Mission (*1000)", breaks=seq(0,400000,by=400000), labels=comma)) +
       theme(plot.margin=margin(t=100,r=10,b=2,l=2),
