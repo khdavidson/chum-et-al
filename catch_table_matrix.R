@@ -75,6 +75,7 @@ data <- data %>%
 ####
 # 1. Calculate CPUE for each run (to be time of day eventually)
 ####
+# Create dataframe: select RST data, apply fished volumes
 data <- data %>%
   filter(trap_type =="RST") %>%
   mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
@@ -89,9 +90,9 @@ data <- data %>%
 # Summarize catch by USID and date, calculate CPUE by RUN  
 CPUE <- data %>% 
   group_by(date, USID, fished_vol, set_start, set_end, bay) %>% 
-  summarize(total_n = unique(sockeye_smolt_total)) %>% 
-  mutate(CPUE_run = total_n/fished_vol) %>%
-  mutate(bay = ifelse(bay=="B2", "bay2", 
+  summarize(total_n = unique(sockeye_smolt_total)) %>%                           # Just used raw catch here as expanded isn't required
+  mutate(CPUE_run = total_n/fished_vol) %>%                                      # Calculate CPUE 
+  mutate(bay = ifelse(bay=="B2", "bay2",                                         # Rename Bays
                ifelse(bay=="B6", "bay6", "bay11"))) %>%
   print()
 
@@ -99,10 +100,11 @@ CPUE <- data %>%
 ####
 # 2. Reformat CPUE date-times 
 ####
-CPUE$set_start <- as.character(CPUE$set_start)
+# First set as character
+CPUE$set_start <- as.character(CPUE$set_start)                                   
 CPUE$set_end <- as.character(CPUE$set_end)
 
-# Add zero to start of 3 digit numbers 
+# Add zero to start of 3 digit numbers (i.e., 945 becomes 0945)
 CPUE$set_start <- with_options(c(scipen = 999), str_pad(CPUE$set_start, 4, pad = "0"))
 CPUE$set_end <- with_options(c(scipen = 999), str_pad(CPUE$set_end, 4, pad = "0"))
 
@@ -116,21 +118,21 @@ CPUE <- CPUE %>%
     CPUE$set_start <- str_sub(CPUE$set_start, 1, str_length(CPUE$set_start)-1)
     CPUE$set_end <- str_sub(CPUE$set_end, 1, str_length(CPUE$set_end)-1)
 
-# Make as time 
+# Make as date-time (POSIXct) for minute intervals
 CPUE$date_start = as.POSIXct(paste(CPUE$date, CPUE$set_start),tz = "")
 CPUE$date_end = as.POSIXct(paste(CPUE$date, CPUE$set_end),tz = "")
 
 ####
-# 3. Restructure, reformat dataframe a bit 
+# 3. Restructure, reformat dataframe
 ####
-# Remove extra columns 
+# Remove extra unneeded columns 
 CPUE2 <- CPUE %>% 
   select(-c(fished_vol, total_n, date)) %>%
   print()
 
 # Restructure start/end to be long form and rename columns
 CPUE2 <- CPUE2 %>%
-  gather("date_start", "date_end", 6:7) %>%
+  gather("date_start", "date_end", 6:7) %>%                                           # Long form
   rename(key = date_start,
          value = date_end) %>% 
   print()
@@ -146,7 +148,7 @@ CPUE_sub3 <- CPUE_sub2 %>%
   group_by(USID) %>%
   fill(set_start, set_end, bay, CPUE_run)
 
-    # Remove extra columns
+    # Remove other extra columns
     CPUE_sub3 <- CPUE_sub3 %>% 
       select(-set_start, -set_end, -key) %>% 
       arrange(value) %>%
@@ -154,19 +156,19 @@ CPUE_sub3 <- CPUE_sub2 %>%
 
     # Reformat to be wide format 
     CPUE_spr <- CPUE_sub3 %>% 
-      spread(bay, CPUE_run) %>% 
+      spread(bay, CPUE_run) %>%                                                       # Wide form
       print()
 
 ####
 # 5. Creating new time series to fill in un-sampled windows
 ####
-# New empty time series 
+# New empty time series for length of whole season, 1 minute intervals
 ts.min <- data.frame(value=seq(ymd_hm("2017-04-03 06:07", tz=""), ymd_hm("2017-06-14 23:59", tz=""), by="1 min"))
 
 # Merge CPUE and empty time series dataframes
-CPUE_spr.merge <- left_join(ts.min, CPUE_spr, by="value")
+CPUE_spr.merge <- left_join(ts.min, CPUE_spr, by="value")                             # left_join will preserve sampling intervals and just infill minute intervals between the end of a run and the beginning of another
 
-    # Re-order columns
+    # Re-order columns for easy reading
     CPUE_spr.merge <- CPUE_spr.merge %>% 
       select(USID, value, bay2, bay6, bay11) %>% 
       arrange(value) %>% 
@@ -176,7 +178,7 @@ CPUE_spr.merge <- left_join(ts.min, CPUE_spr, by="value")
 # 6. Ensure there are no duplicated date-time intervals
 ####
 # Identify the row numbers of duplicates (used to index below)
-which(duplicated(CPUE_spr.merge$value) | duplicated(CPUE_spr.merge$value, fromLast = TRUE))
+which(duplicated(CPUE_spr.merge$value) | duplicated(CPUE_spr.merge$value, fromLast = TRUE))                   
 
 # Pull out the metadata for each row number 
 dupl_CPUE.merge <- CPUE_spr.merge %>% 
@@ -202,7 +204,6 @@ dupl_CPUE.merge <- CPUE_spr.merge %>%
   mutate(dup_val = duplicated(value)) %>% 
   filter(dup_val) %>% 
   print()
-
 
 # The remaining duplicates appear to be data transcription errors where end and start times overlap (confirmed on hard copy).
   # I will change the second entry for each duplicate to move it ahead to allow for no overlap. 
@@ -245,6 +246,20 @@ CPUE_spr.merge2[66323,2] <- as.POSIXct("2017-05-19 07:22:01")           # Change
   # Remove duplicates at the end of the event
   CPUE_spr.merge2 <- CPUE_spr.merge2[-c(66337, 66338), ]                   # Remove the old empty rows from 07:36 and 07:37
 
+  
+# SUMMARY OF DUPLICATE WORK: 
+  # For runs where the end and start times were the same (e.g., one run ended at 07:15 and the next started at 07:15), I separated
+  # them by 1 second - new end time would become 07:14:59 and new start time would become 07:15:01. 
+  # For the two cases (Apr 18 and May 19) where run end and start times overlapped by 2-3 minutes, the later run of the two was bumped
+    # ahead by the time interval: 
+      # Apr 18: Run 10 start and end times remained the same but bumped by 1 second (09:12 - 09:26:59)
+              # Run 11 start and end times bumped 2 minutes forward. Old times: 09:25 - 09:40. New times: 09:27:10 - 09:42
+      # May 19: Run 3 start and end times remained the same but bumped by 1 second (07:07 - 07:21:59)
+              # Run 4 start and end times bumped 2 minutes forward. Old times: 07:20 - 07:35. New times: 07:22:01 - 07:37
+# These times were given to Matt (Shane/Tod) so that the same corrections can be made in the raw Excel file, but I did not make any
+# changes to the file myself! 
+  
+  
 ####
 # 7. Export
 ####
