@@ -35,6 +35,14 @@ library(withr)
 library(stringr)
 library(padr)
 library(lme4)
+library(forecast)
+library(ggfortify)
+library(changepoint)
+library(strucchange)
+library(ggpmisc)
+library(purrr)
+library(imputeTS)
+library(xts)
 
 
 # Read data
@@ -277,13 +285,13 @@ write.csv(CPUE_spr.merge2, "mission_SO_CPUE_matrix.csv", row.names=F)
 ####################                            KD_202109_MissionSockeyeSmoltCPUECalibrations
 
                                                 #___________________________________________#
-                                                #    METHOD 3.1: Linear trend analysis      #
+                                                #    METHOD 3.1: Infilling with       #
                                                 #___________________________________________#
 
 
-####
-# 1. Overall data exploration to see if normally distributed 
-####
+#######################
+# 1. Create dataframe #
+#######################
 
 data <- read.csv("TEB_leftjoin.csv")      
 
@@ -321,11 +329,11 @@ data3 <- data2 %>%
   summarize(mean_CPUE = mean(CPUE)) %>% 
   print()
 
-####
-# 2. Simple linear model - should use to compare to time series models below to justify not using simple lm() models 
-####
+##########################
+# 2. Simple linear model #
+##########################
 
-lm1 <- lm(data2$CPUE ~ data2$date)
+lm1 <- lm(data3$mean_CPUE ~ data3$date)
 r1 <- resid(lm1)
 plot(r1)
 hist(r1)
@@ -333,23 +341,21 @@ qqnorm(r1)
 qqline(r1)
 plot(lm1)
 
-  # I would not say this is normally distributed...
+  # I would not say this is normally distributed... but that is fair because you can't really use time series data to predict linear
+    # trends under the traditional y=mx+b formula. 
+  # It is also important to assess whether autocorrelation exists within the data, which I will test below 
 
 
+######################
+# 3. Autocorrelation #
+######################
 
+# There seem to be a couple of ways to potentially asses this, so I will highlight what I have learned... 
 
-
-
-
-
-
-###########################################################################################################################
-
-# time series models i was going to use to extract an equation to infill, but packages below do this better i think. 
-
-####
-# 3. More complex time series analysis - taken from tutorial at http://rpubs.com/Mentors_Ubiqum/tslm
-####
+##
+# 1. CREATING TIME SERIES USING DAILY AVERAGE KNOWN CPUE (NOT USING MATRIX) 
+# (From: http://rpubs.com/Mentors_Ubiqum/tslm)
+##
 
 # Make date as.POSIXct
 data3$date <- strptime(data3$date, "%Y-%m-%d" )
@@ -365,15 +371,15 @@ data3 <- data3 %>%
   mutate_at(vars(c(6)), funs(as.character)) %>% 
   mutate_at(vars(c(6)), funs(as.factor))
 
-# Use the year column to aggregate
+# Use the YearDay column to aggregate
 CPUE_month <- aggregate(data3$mean_CPUE, by = list(data3$YearDay), FUN = function(x) mean(x, na.rm=T))
 
-# Now we create the time series adding the right period. Note: It's better to define the end of the time series if it's not at the 
-  # end of one year
+# Now we create the time series. Note: It's better to define the end of the time series if it's not at the end of one year
 myts <- ts(CPUE_month$x, frequency=1)                                      # Frequency = number of obs per unit of time
 plot(myts)
 
-# Now that we have several periods we can decompose (again, this is more for multi-year data)
+# Now that we have several periods we can decompose (again, this is more for multi-year data). Note: can only decompose if in above 
+  # ts() call, frequency > 1
 myds_month <- decompose(myts)
 plot(myds_month)
 
@@ -383,42 +389,206 @@ plot(myds_month)
 CPUE_ts <- data.frame(cpue = myts, as.numeric(time(myts)))
 names(CPUE_ts) <- c("cpue", "date")
 
+##
+# 2. CREATE & FIT MODELS 
+##
 
-####
-# 5. Linear model selection/validation
-####
 # Create a model using tslm - We can model using trend, season and random
-lm1.ts <- tslm(cpue ~ date, CPUE_ts)
-lm2.ts <- tslm(cpue ~ date + trend, CPUE_ts)               # No real effect of trend, can't run seasonal
+tslm.1 <- tslm(cpue ~ date, CPUE_ts)
+tslm.2 <- tslm(cpue ~ date + trend, CPUE_ts)               # No real effect of trend, can't run seasonal
 
-    # Forecasting using tslm() model
-      # We are going to predict the next 10 years (h)
+    # Forecasting using tslm() model - We are going to predict the next 10 years (h)
     CPUE_fc <- forecast(lm1.ts,h=120)
     autoplot(lm1.ts)
 
-# Examine residuals
-acf(resid(lm1.ts)) 
-    
-    
-# Autocorrelation
-# fit regression with autocorrelated models
-lm3.ar1 <- auto.arima(CPUE_ts$cpue, stepwise=F, approximation=F)
-acf(resid(lm3.ar1))
+# Examine residuals and model summary results 
+acf(resid(tslm.1))                             # The cyclical/oscillating bars indicate autocorrelation 
+summary(tslm.1)
 
-fit <- arima(x=CPUE_ts$cpue, xreg=CPUE_ts$date, order =  c(1, 0, 0)) 
+    # We can compare the model output results of lm() and tslm() to see which one fits better. 
+        # lm(): icpt est: 1.50e-01, date est: -9.95e-11
+        # tslm(): icpt est: 1.30e-03, date est: -8.22e-06 
+
+# Fit auto.arima() which will inform the 'order' call
+a.ar.1 <- auto.arima(CPUE_ts$cpue, stepwise=F, approximation=F)
+acf(resid(a.ar.1))
+summary(a.ar.1)            #ar1=0.5023, order: ARIMA(1,0,0)
+
+# Confirm by fitting arima() with order (1,0,0)
+ar1 <- arima(myts, order = c(1,0,0))
+
+##
+# 3. COMPETE MODELS 
+##
+
+# List of models
+ts_models <- list()
+ts_models$lm1 <- lm(data3$mean_CPUE ~ data3$date)
+ts_models$tslm.1 <- tslm(cpue ~ date, CPUE_ts)
+ts_models$ar1 <- arima(myts, order = c(1,0,0))
+
+      # Set up function to make table 
+      show_estimates <- function(model) {
+        model %>%
+          broom::tidy() %>% 
+          dplyr::select(term, estimate) %>%
+          modify_if(is.numeric, round, 8) %>% 
+          # + some preparation to combine lm and arima output later
+          modify_at("term", as.character) %>% 
+          modify_at("term", stringr::str_replace,
+                    pattern = "\\(Intercept\\)",
+                    replacement = "intercept") %>% 
+          modify_at("term", stringr::str_replace,
+                    pattern = "(trend|drift)", ## improve pattern
+                    replacement = "trend/drift")
+      }
+      
+      #  customize html-tables
+      hux_table <- function(df, caption) {
+        library(huxtable)
+        content_rows <- 1:nrow(df) + 1  # +1 for the header
+        content_cols <- 2:ncol(df)
+        df %>% 
+          hux(add_colnames = TRUE) %>% 
+          set_bold(row = 1, col = everywhere, value = TRUE) %>%
+          set_bottom_border(row = 1, col = everywhere, value = TRUE) %>%
+          set_pad_decimal(content_rows, everywhere, ".") %>%
+          set_align(c(1, content_rows), content_cols, "right") %>% 
+          set_number_format(content_rows, everywhere, "%5.4g") %>% 
+          set_caption(caption)
+      }
+
+# Print tables with parameter estimates -- note, they say 0 due to decimal truncation 
+ts_models %>% 
+  map(show_estimates) %>% 
+  reduce(full_join, by = "term") %>% 
+  set_names(c("term", names(ts_models))) %>% 
+  filter(!str_detect(term, "season")) %>% 
+  hux_table("Coefficients including Autocorrelated Models")
+
+# Compare models
+ts_models %>% 
+  map_df(AIC) %>% 
+  gather("model", "fit") %>% 
+  arrange(fit) %>% 
+  hux_table("AIC")
 
 
-##########################################################################################################################
+    # ARIMA models fit better which indicates autocorrelation in dataset 
 
 
 
+#########################################
+# 3. ASSESS MISSING DATA IN CATCH TABLE #
+#########################################
+
+# Load catch table matrix
+matrix <- read.csv("mission_SO_CPUE_matrix.csv")
+
+    # Bay 2 matrix
+    matrix2 <- matrix %>% 
+      select(value, bay2) %>% 
+      rename(date=value)
+    # Bay 6 matrix
+    matrix6 <- matrix %>% 
+      select(value, bay6) %>% 
+      rename(date=value)
+    # Bay 11 matrix
+    matrix11 <- matrix %>% 
+      select(value, bay11) %>% 
+      rename(date=value)
+
+# Create a time series for each Bay
+#z.bay2 <- read.zoo(file = matrix2, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
+#bay2.ts <- as.ts(z.bay2)                 # For some reason, while zoo() preserves the matrix fine, this call makes the ts wildy innacurrate - 6mil+ entries vs 104k which is what it is supposed to have. use ts() as below
+ts.b2 <- ts(matrix2$bay2)
+
+#z.bay6 <- read.zoo(file = matrix6, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
+#bay6.ts <- as.ts(z.bay6)
+ts.b6 <- ts(matrix6$bay6)
+
+#z.bay11 <- read.zoo(file = matrix11, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
+#bay11.ts <- as.ts(z.bay11)
+ts.b11 <- ts(matrix11$bay11)
+
+##
+# imputeTS()
+##
+# Summary stats on NAs using imputeTS() package
+statsNA(ts.b2)
+statsNA(ts.b6)
+statsNA(ts.b11)
+
+# Plot NAs using imputTS() package
+plotNA.distribution(ts.b2)                             # returns time series plot with pink background for NAs
+plotNA.distributionBar(ts.b2, breaks = 20)             # returns stacked bar graph with % NAs for each breaks bin
+plotNA.gapsize(ts.b2)                                  # returns side-by-sde bar graph for NA gap size
+
+plotNA.distribution(ts.b6)
+plotNA.distributionBar(ts.b6, breaks = 20)
+plotNA.gapsize(ts.b6)
+
+plotNA.distribution(ts.b11)
+plotNA.distributionBar(ts.b11, breaks = 20)
+plotNA.gapsize(ts.b11)
+
+
+#################################
+# 4. INTERPOLATE NAs - imputeTS #
+#################################
+
+# Calculate imputations - Bay 2
+mean.bay2 <- na.mean(ts.b2)
+  med.bay2 <- na.mean(ts.b2, option = "median")
+int.a.bay2 <- na.interpolation(ts.b2)
+  int.sp.bay2 <- na.interpolation(ts.b2)
+  int.st.bay2 <- na.interpolation(ts.b2)
+kal.bay2 <- na.kalman(ts.b2)                             # returns warning
+sea.bay2 <- na.seadec(ts.b2)                             # no seasonality (but would be in bigger dataset)
+# Calculate imputations - Bay 6
+mean.bay6 <- na.mean(ts.b6)
+  med.bay6 <- na.mean(ts.b6, option = "median")
+int.a.bay6 <- na.interpolation(ts.b6)
+  int.sp.bay6 <- na.interpolation(ts.b6)
+  int.st.bay6 <- na.interpolation(ts.b6)       
+kal.bay6 <- na.kalman(ts.b6)                             # returns warning          
+# Calculate imputations - Bay 11
+mean.bay11 <- na.mean(ts.b11)
+  med.bay11 <- na.mean(ts.b11, option = "median")
+int.a.bay11 <- na.interpolation(ts.b11)
+  int.sp.bay11 <- na.interpolation(ts.b11)
+  int.st.bay11 <- na.interpolation(ts.b11)
+kal.bay11 <- na.kalman(ts.b11)                           # no warning!
+
+
+# Plot imputations
+plotNA.imputations(ts.b2, mean.bay2)
+plotNA.imputations(ts.b2, int.a.bay2)
+plotNA.imputations(ts.b2, int.sp.bay2)
+plotNA.imputations(ts.b2, int.st.bay2)
+
+plotNA.imputations(ts.b6, mean.bay6)
+plotNA.imputations(ts.b6, int.bay6)
+plotNA.imputations(ts.b6, kal.bay6)
+
+plotNA.imputations(ts.b11, mean.bay11)
+plotNA.imputations(ts.b11, int.bay11)
+plotNA.imputations(ts.b11, kal.bay11)
 
 
 
+########################
+# 5. Export back to df #
+########################
 
+# Make as.df
+bay2.aint.df <- as.data.frame(int.a.bay2)
 
+# Row names from original matrix correspond to time series 
+date2 <- matrix2$date
 
-
+# Bind
+bay2.df <- cbind(bay2.aint.df, date2)
 
 
 #########################################################################################
@@ -435,11 +605,7 @@ matrix2 <- matrix %>%
   rename(date=value)
 
 
-library(forecast)
-library(ggfortify)
-library(changepoint)
-library(strucchange)
-library(ggpmisc)
+
 
 x <- zoo(matrix2$bay2,matrix2$date, order.by=as.POSIXct(matrix2$date, "%Y-%m-%d %H:%M:%S", tz="GMT"), frequency=1)
 x2 <- as.ts(x, order.by=as.POSIXct(x[0,], "%Y-%m-%d %H:%M:%S", tz="GMT"), frequency=1)
@@ -452,42 +618,6 @@ autoplot(x)
 
 
 
-
-####################################################################################################################
-
-# this stuff kinda works but isnt ideal 
-
-# Use the year column to aggregate
-#bay2_ag <- aggregate(matrix$bay2, by = list(matrix$date), FUN = function(x) mean(x, na.rm=T))
-
-# Now we create the time series adding the right period. Note: It's better to define the end of the time series if it's not at the 
-  # end of one year
-matrix2.ts <- ts(matrix2$bay2, frequency=1, order.by=as.POSIXct(matrix$Group.1), "%Y-%m-%d %H:%M:%S")                                      # Frequency = number of obs per unit of time
-
-bay2.xts <- xts(bay2_ag, order.by=as.POSIXct(matrix$Group.1), "%Y-%m-%d %H:%M:%S")
-
-library(imputeTS)
-# plot NAs
-plotNA.distribution(bay2.ts)
-plotNA.distributionBar(bay2.ts, breaks = 50)
-plotNA.gapsize(bay2.ts)
-
-# Summary stats on NAs 
-statsNA(bay2.ts)
-
-# Calculate imputations
-mean.bay2 <- na.mean(bay2.ts)
-  med.bay2 <- na.mean(bay2.ts, option = "median")
-
-int.bay2 <- na.interpolation(bay2.ts)
-int <- na.interpolation(matrix2.xts$bay2)
-
-kal.bay2 <- na.kalman(bay2.ts)     # returns warning
-sea.bay2 <- na.seadec(bay2.ts)     # no seasonality (but would be in bigger dataset)
-
-# Plot imputations
-plotNA.imputations(bay2.ts, int.bay2)
-plotNA.imputations(bay2.ts, kal.bay2)
 
 ####################################################################################################################
 
