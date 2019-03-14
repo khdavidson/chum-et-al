@@ -34,6 +34,7 @@ library(lubridate)
 library(withr)
 library(stringr)
 library(padr)
+library(lme4)
 
 
 # Read data
@@ -264,7 +265,7 @@ CPUE_spr.merge2[66323,2] <- as.POSIXct("2017-05-19 07:22:01")           # Change
 # 7. Export
 ####
 
-write.csv(CPUE_spr.merge, "mission_SO_CPUE_matrix.csv", row.names=F)
+write.csv(CPUE_spr.merge2, "mission_SO_CPUE_matrix.csv", row.names=F)
 
 
 
@@ -272,8 +273,142 @@ write.csv(CPUE_spr.merge, "mission_SO_CPUE_matrix.csv", row.names=F)
 #-------------------------------------------------------------------------------------------------------------------------------------
 
 ####################
-# APPLY STATISTICS #
-####################
+# APPLY STATISTICS #                                CORRESPONDS TO SECTIONS IN WORD DOC: 
+####################                            KD_202109_MissionSockeyeSmoltCPUECalibrations
+
+                                                #___________________________________________#
+                                                #    METHOD 3.1: Linear trend analysis      #
+                                                #___________________________________________#
+
+
+####
+# 1. Overall data exploration to see if normally distributed 
+####
+
+data <- read.csv("TEB_leftjoin.csv")      
+
+    # Create run time column
+    data <- data %>%
+      select(everything()) %>%
+      mutate_at(vars(c(17)), funs(as.character)) %>%
+      mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
+      mutate_at(vars(c(17)), funs(as.numeric)) %>%
+      mutate(run_time_s = run_time*60)
+
+# Calculate CPUE per run 
+data2 <- data %>%
+  filter(trap_type =="RST", sockeye_fry_total != "NR") %>%
+  group_by(USID, date) %>%
+  summarize(unq_SO = unique(sockeye_smolt_total), run_time = unique(run_time_s)) %>%
+  mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                 ifelse(run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
+                                 ifelse(run_time=="1080", "2238.905",
+                                 ifelse(run_time=="1140", "2363.288",
+                                 ifelse(run_time=="1200", "2487.672",
+                                 ifelse(run_time=="1260", "2612.056",
+                                 ifelse(run_time=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(CPUE = unq_SO/fished_vol) %>%
+  print()
+
+data2<-data2 %>% 
+  select(-fished_vol, -run_time, -USID) %>% 
+  print()
+
+
+# Average CPUE per day 
+data3 <- data2 %>% 
+  group_by(date) %>% 
+  summarize(mean_CPUE = mean(CPUE)) %>% 
+  print()
+
+####
+# 2. Simple linear model - should use to compare to time series models below to justify not using simple lm() models 
+####
+
+lm1 <- lm(data2$CPUE ~ data2$date)
+r1 <- resid(lm1)
+plot(r1)
+hist(r1)
+qqnorm(r1)
+qqline(r1)
+plot(lm1)
+
+  # I would not say this is normally distributed...
+
+
+
+
+
+
+
+
+
+###########################################################################################################################
+
+# time series models i was going to use to extract an equation to infill, but packages below do this better i think. 
+
+####
+# 3. More complex time series analysis - taken from tutorial at http://rpubs.com/Mentors_Ubiqum/tslm
+####
+
+# Make date as.POSIXct
+data3$date <- strptime(data3$date, "%Y-%m-%d" )
+data3$date <- as.POSIXct(data3$date)
+
+# Create different columns for different time configurations (more important with multi-year dataset)
+data3 <- data3 %>% 
+  mutate(MonthYear = paste(year(date),formatC(month(date), width = 2, flag = "0"))) %>%                       # Month of year
+  mutate(YearDay = paste(year(date), formatC(month(date), width = 2, flag = "0"),                             # Day of week of Year
+                                                     formatC(day(date), width = 2, flag = "0"))) %>% 
+  mutate(Week = week(date)) %>%                                                                               # Week of year
+  mutate(Year = year(date)) %>%
+  mutate_at(vars(c(6)), funs(as.character)) %>% 
+  mutate_at(vars(c(6)), funs(as.factor))
+
+# Use the year column to aggregate
+CPUE_month <- aggregate(data3$mean_CPUE, by = list(data3$YearDay), FUN = function(x) mean(x, na.rm=T))
+
+# Now we create the time series adding the right period. Note: It's better to define the end of the time series if it's not at the 
+  # end of one year
+myts <- ts(CPUE_month$x, frequency=1)                                      # Frequency = number of obs per unit of time
+plot(myts)
+
+# Now that we have several periods we can decompose (again, this is more for multi-year data)
+myds_month <- decompose(myts)
+plot(myds_month)
+
+# Create a data frame to use tslm()
+  # First column: time series
+  # Second column: Numerical value of time
+CPUE_ts <- data.frame(cpue = myts, as.numeric(time(myts)))
+names(CPUE_ts) <- c("cpue", "date")
+
+
+####
+# 5. Linear model selection/validation
+####
+# Create a model using tslm - We can model using trend, season and random
+lm1.ts <- tslm(cpue ~ date, CPUE_ts)
+lm2.ts <- tslm(cpue ~ date + trend, CPUE_ts)               # No real effect of trend, can't run seasonal
+
+    # Forecasting using tslm() model
+      # We are going to predict the next 10 years (h)
+    CPUE_fc <- forecast(lm1.ts,h=120)
+    autoplot(lm1.ts)
+
+# Examine residuals
+acf(resid(lm1.ts)) 
+    
+    
+# Autocorrelation
+# fit regression with autocorrelated models
+lm3.ar1 <- auto.arima(CPUE_ts$cpue, stepwise=F, approximation=F)
+acf(resid(lm3.ar1))
+
+fit <- arima(x=CPUE_ts$cpue, xreg=CPUE_ts$date, order =  c(1, 0, 0)) 
+
+
+##########################################################################################################################
 
 
 
@@ -286,11 +421,75 @@ write.csv(CPUE_spr.merge, "mission_SO_CPUE_matrix.csv", row.names=F)
 
 
 
+#########################################################################################
+
+# this stuff might be better? 
+
+####
+# USING MATRIX - BAY 2 ONLY TO START
+####
+
+matrix <- read.csv("mission_SO_CPUE_matrix.csv")
+matrix2 <- matrix %>% 
+  select(value, bay2) %>% 
+  rename(date=value)
+
+
+library(forecast)
+library(ggfortify)
+library(changepoint)
+library(strucchange)
+library(ggpmisc)
+
+x <- zoo(matrix2$bay2,matrix2$date, order.by=as.POSIXct(matrix2$date, "%Y-%m-%d %H:%M:%S", tz="GMT"), frequency=1)
+x2 <- as.ts(x, order.by=as.POSIXct(x[0,], "%Y-%m-%d %H:%M:%S", tz="GMT"), frequency=1)
+x <- na.interp(x)
+x4 <- na.interpolation(x, option = "linear")
+ 
+autoplot(x)
 
 
 
 
 
+
+####################################################################################################################
+
+# this stuff kinda works but isnt ideal 
+
+# Use the year column to aggregate
+#bay2_ag <- aggregate(matrix$bay2, by = list(matrix$date), FUN = function(x) mean(x, na.rm=T))
+
+# Now we create the time series adding the right period. Note: It's better to define the end of the time series if it's not at the 
+  # end of one year
+matrix2.ts <- ts(matrix2$bay2, frequency=1, order.by=as.POSIXct(matrix$Group.1), "%Y-%m-%d %H:%M:%S")                                      # Frequency = number of obs per unit of time
+
+bay2.xts <- xts(bay2_ag, order.by=as.POSIXct(matrix$Group.1), "%Y-%m-%d %H:%M:%S")
+
+library(imputeTS)
+# plot NAs
+plotNA.distribution(bay2.ts)
+plotNA.distributionBar(bay2.ts, breaks = 50)
+plotNA.gapsize(bay2.ts)
+
+# Summary stats on NAs 
+statsNA(bay2.ts)
+
+# Calculate imputations
+mean.bay2 <- na.mean(bay2.ts)
+  med.bay2 <- na.mean(bay2.ts, option = "median")
+
+int.bay2 <- na.interpolation(bay2.ts)
+int <- na.interpolation(matrix2.xts$bay2)
+
+kal.bay2 <- na.kalman(bay2.ts)     # returns warning
+sea.bay2 <- na.seadec(bay2.ts)     # no seasonality (but would be in bigger dataset)
+
+# Plot imputations
+plotNA.imputations(bay2.ts, int.bay2)
+plotNA.imputations(bay2.ts, kal.bay2)
+
+####################################################################################################################
 
 
 
