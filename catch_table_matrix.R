@@ -581,45 +581,256 @@ plotNA.imputations(ts.b11, kal.bay11)
 # 5. Export back to df #
 ########################
 
+##
+# Interp series 1 - approx
+##
+
 # Make as.df
 bay2.aint.df <- as.data.frame(int.a.bay2)
+bay6.aint.df <- as.data.frame(int.a.bay6)
+bay11.aint.df <- as.data.frame(int.a.bay11)
 
 # Row names from original matrix correspond to time series 
-date2 <- matrix2$date
+date <- matrix$value
+USID <- matrix$USID
 
 # Bind
-bay2.df <- cbind(bay2.aint.df, date2)
+a.int.df <- cbind(USID, date, bay2.aint.df, bay6.aint.df, bay11.aint.df)
+names(a.int.df) <- c("USID", "date", "B2", "B6", "B11")
 
 
-#########################################################################################
+##
+# Interp series 2 - spline
+##
 
-# this stuff might be better? 
+# Make as.df
+bay2.spint.df <- as.data.frame(int.sp.bay2)
+bay6.spint.df <- as.data.frame(int.sp.bay6)
+bay11.spint.df <- as.data.frame(int.sp.bay11)
 
-####
-# USING MATRIX - BAY 2 ONLY TO START
-####
+# Row names from original matrix correspond to time series 
+date <- matrix$value
+USID <- matrix$USID
 
-matrix <- read.csv("mission_SO_CPUE_matrix.csv")
-matrix2 <- matrix %>% 
-  select(value, bay2) %>% 
-  rename(date=value)
-
-
-
-
-x <- zoo(matrix2$bay2,matrix2$date, order.by=as.POSIXct(matrix2$date, "%Y-%m-%d %H:%M:%S", tz="GMT"), frequency=1)
-x2 <- as.ts(x, order.by=as.POSIXct(x[0,], "%Y-%m-%d %H:%M:%S", tz="GMT"), frequency=1)
-x <- na.interp(x)
-x4 <- na.interpolation(x, option = "linear")
- 
-autoplot(x)
+# Bind
+sp.int.df <- cbind(USID, date, bay2.spint.df, bay6.spint.df, bay11.spint.df)
+names(sp.int.df) <- c("USID", "date", "B2", "B6", "B11")
 
 
+##
+# Interp series 2 - stine
+##
+
+# Make as.df
+bay2.stint.df <- as.data.frame(int.st.bay2)
+bay6.stint.df <- as.data.frame(int.st.bay6)
+bay11.stint.df <- as.data.frame(int.st.bay11)
+
+# Row names from original matrix correspond to time series 
+date <- matrix$value
+USID <- matrix$USID
+
+# Bind
+st.int.df <- cbind(USID, date, bay2.stint.df, bay6.stint.df, bay11.stint.df)
+names(st.int.df) <- c("USID", "date", "B2", "B6", "B11")
+
+
+##########################
+# 6. Summarize & compare #
+##########################
+
+##
+# Interp series 1 - approx
+##
+
+# Split dat-time column so that catch can be averaged for each bay, each day 
+a.bay.df <- a.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  group_by(day) %>% 
+  summarize(B2 = mean(B2), B6 = mean(B6), B11 = mean(B11)) %>%
+  gather(bay, CPUE, "B2", "B6", "B6", 2:4)
+
+
+# Same again but straight to daily average 
+a.day.df <- a.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  gather(bay, CPUE, "B2", "B6", "B11", 3:5) %>%  
+  group_by(day) %>% 
+  summarize(mean_CPUE = mean(CPUE))
+
+
+##
+# Interp series 2 - spline
+##
+
+# Split dat-time column so that catch can be averaged for each bay, each day 
+sp.bay.df <- sp.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  group_by(day) %>% 
+  summarize(B2 = mean(B2), B6 = mean(B6), B11 = mean(B11)) %>%
+  gather(bay, CPUE, "B2", "B6", "B11", 2:4)
+
+
+# Same again but straight to daily average 
+sp.day.df <- sp.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  gather(bay, CPUE, "B2", "B6", "B11", 3:5) %>%  
+  group_by(day) %>% 
+  summarize(mean_CPUE = mean(CPUE))
+
+
+##
+# Interp series 3 - stine
+##
+
+# Split dat-time column so that catch can be averaged for each bay, each day 
+st.bay.df <- st.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  group_by(day) %>% 
+  summarize(B2 = mean(B2), B6 = mean(B6), B11 = mean(B11)) %>%
+  gather(bay, CPUE, "B2", "B6", "B11", 2:4)
+
+
+# Same again but straight to daily average 
+st.day.df <- st.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  gather(bay, CPUE, "B2", "B6", "B11", 3:5) %>%  
+  group_by(day) %>% 
+  summarize(mean_CPUE = mean(CPUE))
+
+
+
+##
+# Raw series
+##
+
+data <- read.csv("TEB_leftjoin.csv")      
+    # Create run time column
+    data <- data %>%
+      select(everything()) %>%
+      mutate_at(vars(c(17)), funs(as.character)) %>%
+      mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
+      mutate_at(vars(c(17)), funs(as.numeric)) %>%
+      mutate(run_time_s = run_time*60)
+
+# Calculate CPUE per run 
+data2 <- data %>%
+  filter(trap_type =="RST", sockeye_fry_total != "NR") %>%
+  group_by(USID, date, bay) %>%
+  summarize(unq_SO = unique(sockeye_smolt_total), run_time = unique(run_time_s)) %>%
+  mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                 ifelse(run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
+                                 ifelse(run_time=="1080", "2238.905",
+                                 ifelse(run_time=="1140", "2363.288",
+                                 ifelse(run_time=="1200", "2487.672",
+                                 ifelse(run_time=="1260", "2612.056",
+                                 ifelse(run_time=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(CPUE = unq_SO/fished_vol) %>%
+  print()
+
+# Average CPUE per day 
+day.dat <- data2 %>% 
+  select(-fished_vol, -run_time, -USID) %>% 
+  group_by(date) %>% 
+  summarize(mean_CPUE = mean(CPUE)) %>% 
+  print()
+
+# Average CPUE by bay 
+bay.dat <- data2 %>% 
+  group_by(date, bay) %>% 
+  summarize(mean_CPUE = mean(CPUE))
 
 
 
 
-####################################################################################################################
+
+##
+# PLOTTY PLOT PLOT 
+##
+
+# Plot by daily average CPUE 
+day.dat$date <- as.Date(day.dat$date)
+a.day.df$day <- as.Date(a.day.df$day)
+ggplot() + 
+  geom_line(data=day.dat, aes(x=date, y=mean_CPUE, colour="Raw CPUE", linetype="Raw CPUE"), 
+            size=2, alpha=0.6) +
+  geom_line(data=a.day.df, aes(x=day, y=mean_CPUE, colour="Approx. interpolated CPUE", linetype="Approx. interpolated CPUE"), 
+            size=2, alpha=0.7) +
+  #geom_line(data=sp.day.df, aes(x=day, y=mean_CPUE), colour="green", size=2, alpha=0.6) +      # all interp results are the same
+  #geom_line(data=st.day.df, aes(x=day, y=mean_CPUE), colour="blue", size=2, alpha=0.6) +
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+  scale_colour_manual("", values=c("Raw CPUE" = "black", 
+                                   "Approx. interpolated CPUE" = "red")) + 
+  scale_linetype_manual("", values=c("Raw CPUE" = 1,
+                                     "Approx. interpolated CPUE" = 1)) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=0),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=45),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=45),
+        legend.text = element_text(size=25),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.75,0.85),
+        legend.key.width = unit(4, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+    ylab("CPUE (fish/m3)") +
+    xlab("Date")
+
+
+# Plot by daily average by bay CPUE 
+bay.dat$date <- as.Date(bay.dat$date)
+a.bay.df$day <- as.Date(a.bay.df$day)
+ggplot() + 
+  geom_line(data=bay.dat, aes(x=date, y=mean_CPUE, group=bay, colour=bay), size=2, alpha=0.5, linetype="longdash") +
+  geom_line(data=a.bay.df, aes(x=day, y=CPUE, group=bay, colour=bay), size=2, alpha=0.7) +
+  #geom_line(data=sp.bay.df, aes(x=day, y=CPUE, group=bay, colour=bay), size=2, alpha=0.7) +    # all interp results are the same
+  #geom_line(data=st.bay.df, aes(x=day, y=CPUE, group=bay, colour=bay), size=2, alpha=0.7) 
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+#  scale_colour_manual("", values=c("Raw CPUE" = "black", 
+#                                   "Approx. interpolated CPUE" = "red")) + 
+#  scale_linetype_manual("", values=c("Raw CPUE" = 1,
+ #                                    "Approx. interpolated CPUE" = 1)) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=0),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=45),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=45),
+        legend.text = element_text(size=25),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.75,0.85),
+        legend.key.width = unit(4, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+    ylab("CPUE (fish/m3)") +
+    xlab("Date")
+
+
+
+
+
+
+
+
+
 
 
 
