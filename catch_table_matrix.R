@@ -280,13 +280,13 @@ write.csv(CPUE_spr.merge2, "mission_SO_CPUE_matrix.csv", row.names=F)
 
 #-------------------------------------------------------------------------------------------------------------------------------------
 
-####################
-# APPLY STATISTICS #                                CORRESPONDS TO SECTIONS IN WORD DOC: 
-####################                            KD_202109_MissionSockeyeSmoltCPUECalibrations
 
-                                                #___________________________________________#
-                                                #    METHOD 3.1: Infilling with       #
-                                                #___________________________________________#
+#                                                 CORRESPONDS TO SECTIONS IN WORD DOC: 
+#                                             KD_202109_MissionSockeyeSmoltCPUECalibrations
+
+                                                #_________________________________________#
+                                                #    METHOD 3.1: Infilling with CPUE      #
+                                                #_________________________________________#
 
 
 #######################
@@ -398,8 +398,8 @@ tslm.1 <- tslm(cpue ~ date, CPUE_ts)
 tslm.2 <- tslm(cpue ~ date + trend, CPUE_ts)               # No real effect of trend, can't run seasonal
 
     # Forecasting using tslm() model - We are going to predict the next 10 years (h)
-    CPUE_fc <- forecast(lm1.ts,h=120)
-    autoplot(lm1.ts)
+    CPUE_fc <- forecast(tslm.1,h=120)
+    autoplot(tslm.1)
 
 # Examine residuals and model summary results 
 acf(resid(tslm.1))                             # The cyclical/oscillating bars indicate autocorrelation 
@@ -747,11 +747,8 @@ bay.dat <- data2 %>%
   summarize(mean_CPUE = mean(CPUE))
 
 
-
-
-
 ##
-# PLOTTY PLOT PLOT 
+# PLOT: Normal temporal  
 ##
 
 # Plot by daily average CPUE 
@@ -759,18 +756,18 @@ day.dat$date <- as.Date(day.dat$date)
 a.day.df$day <- as.Date(a.day.df$day)
 ggplot() + 
   geom_line(data=day.dat, aes(x=date, y=mean_CPUE, colour="Raw CPUE", linetype="Raw CPUE"), 
-            size=2, alpha=0.6) +
-  geom_line(data=a.day.df, aes(x=day, y=mean_CPUE, colour="Approx. interpolated CPUE", linetype="Approx. interpolated CPUE"), 
+            size=2, alpha=0.7) +
+  geom_line(data=a.day.df, aes(x=day, y=mean_CPUE, colour="Interpolated CPUE", linetype="Interpolated CPUE"), 
             size=2, alpha=0.7) +
   #geom_line(data=sp.day.df, aes(x=day, y=mean_CPUE), colour="green", size=2, alpha=0.6) +      # all interp results are the same
   #geom_line(data=st.day.df, aes(x=day, y=mean_CPUE), colour="blue", size=2, alpha=0.6) +
   scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
   scale_colour_manual("", values=c("Raw CPUE" = "black", 
-                                   "Approx. interpolated CPUE" = "red")) + 
+                                   "Interpolated CPUE" = "red")) + 
   scale_linetype_manual("", values=c("Raw CPUE" = 1,
-                                     "Approx. interpolated CPUE" = 1)) +
+                                     "Interpolated CPUE" = 1)) +
   theme(text = element_text(colour="black", size=45),
-        plot.margin=margin(t=15,r=15,b=0,l=0),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
         panel.background = element_rect(fill = "white", colour = "black", size=2),
         panel.grid.minor = element_line(colour = "transparent"),
         panel.grid.major = element_line(colour = "transparent"),
@@ -778,31 +775,30 @@ ggplot() +
         axis.ticks = element_line(size=1.2),
         axis.ticks.length = unit(0.5, "line"),
         axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=45),
+        axis.text.y = element_text(colour="black", size=25),
         axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=45),
-        legend.text = element_text(size=25),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
         legend.title = element_blank(),
         legend.background = element_rect(fill="white", colour="black"),
-        legend.position = c(0.75,0.85),
-        legend.key.width = unit(4, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-    ylab("CPUE (fish/m3)") +
-    xlab("Date")
+        legend.position = c(0.80,0.90),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab(expression(bold(paste("CPUE (fish/",m^3,")")))) +   
+  xlab("")
 
 
-# Plot by daily average by bay CPUE 
+# Plot by daily average by BAY CPUE 
 bay.dat$date <- as.Date(bay.dat$date)
 a.bay.df$day <- as.Date(a.bay.df$day)
 ggplot() + 
-  geom_line(data=bay.dat, aes(x=date, y=mean_CPUE, group=bay, colour=bay), size=2, alpha=0.5, linetype="longdash") +
-  geom_line(data=a.bay.df, aes(x=day, y=CPUE, group=bay, colour=bay), size=2, alpha=0.7) +
-  #geom_line(data=sp.bay.df, aes(x=day, y=CPUE, group=bay, colour=bay), size=2, alpha=0.7) +    # all interp results are the same
-  #geom_line(data=st.bay.df, aes(x=day, y=CPUE, group=bay, colour=bay), size=2, alpha=0.7) 
+  geom_line(data=bay.dat, aes(x=date, y=mean_CPUE, group=bay, colour=bay), 
+            linetype="dashed", size=2, alpha=0.6) +
+  geom_line(data=a.bay.df, aes(x=day, y=CPUE, group=bay, colour=bay), 
+            size=2) +
   scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
-#  scale_colour_manual("", values=c("Raw CPUE" = "black", 
-#                                   "Approx. interpolated CPUE" = "red")) + 
-#  scale_linetype_manual("", values=c("Raw CPUE" = 1,
- #                                    "Approx. interpolated CPUE" = 1)) +
+  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
   theme(text = element_text(colour="black", size=45),
         plot.margin=margin(t=15,r=15,b=0,l=0),
         panel.background = element_rect(fill = "white", colour = "black", size=2),
@@ -812,16 +808,191 @@ ggplot() +
         axis.ticks = element_line(size=1.2),
         axis.ticks.length = unit(0.5, "line"),
         axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=45),
+        axis.text.y = element_text(colour="black", size=25),
         axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=45),
-        legend.text = element_text(size=25),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
         legend.title = element_blank(),
         legend.background = element_rect(fill="white", colour="black"),
-        legend.position = c(0.75,0.85),
-        legend.key.width = unit(4, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-    ylab("CPUE (fish/m3)") +
-    xlab("Date")
+        legend.position = c(0.86,0.85),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab(expression(bold(paste("CPUE (fish/",m^3,")")))) +   
+  xlab("Date")
+
+##
+# PLOT: Cumulative temporal  
+##
+
+# Daily raw CPUE
+day.cuml.dat <- day.dat %>% 
+  mutate(cuml_CPUE = cumsum(mean_CPUE)) %>% 
+  mutate(cuml_propn = cuml_CPUE/sum(mean_CPUE))
+
+# Daily raw CPUE by BAY 
+bay.cuml.dat <- bay.dat %>% 
+  group_by(bay) %>% 
+  mutate(cuml_CPUE = cumsum(mean_CPUE)) %>% 
+  mutate(cuml_propn = cuml_CPUE/sum(mean_CPUE))
+
+# Daily interpolated CPUE 
+a.day.cuml.df <- a.day.df %>% 
+  mutate(cuml_CPUE = cumsum(mean_CPUE)) %>% 
+  mutate(cuml_propn = cuml_CPUE/sum(mean_CPUE))
+
+# Daily interpolated CPUE by BAY 
+a.bay.cuml.df <- a.bay.df %>% 
+  group_by(bay) %>%
+  mutate(cuml_CPUE = cumsum(CPUE)) %>% 
+  mutate(cuml_propn = cuml_CPUE/sum(CPUE))
+
+
+# Plot by daily cumulative CPUE 
+day.cuml.dat$date <- as.Date(day.cuml.dat$date)
+a.day.cuml.df$day <- as.Date(a.day.cuml.df$day)
+
+ggplot() + 
+  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
+  geom_line(data=day.cuml.dat, aes(x=date, y=cuml_propn, colour="Raw CPUE"), size=2, alpha=0.7) +
+  geom_point(data=day.cuml.dat, aes(x=date, y=cuml_propn, fill="Raw CPUE"), pch=21, size=4, alpha=0.7) +
+  geom_line(data=a.day.cuml.df, aes(x=day, y=cuml_propn, colour="Interpolated CPUE"), size=2, alpha=0.7) +
+  geom_point(data=a.day.cuml.df, aes(x=day, y=cuml_propn, fill="Interpolated CPUE"), pch=21, size=4, alpha=0.7) +
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+  scale_colour_manual("", values=c("Raw CPUE" = "black", 
+                                   "Interpolated CPUE" = "red")) + 
+  scale_fill_manual("", values=c("Raw CPUE" = "black",
+                                     "Interpolated CPUE" = "red")) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.75,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("") +   
+  xlab("")
+
+
+# Plot by daily cumulative CPUE BY BAY!
+bay.cuml.dat$date <- as.Date(bay.cuml.dat$date)
+a.bay.cuml.df$day <- as.Date(a.bay.cuml.df$day)
+
+ggplot() + 
+  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
+  geom_line(data=bay.cuml.dat, aes(x=date, y=cuml_propn, colour=bay), linetype="dashed", size=2, alpha=0.6) +
+  geom_point(data=bay.cuml.dat, aes(x=date, y=cuml_propn, fill=bay), pch=21, size=4, alpha=0.6) +
+  geom_line(data=a.bay.cuml.df, aes(x=day, y=cuml_propn, colour=bay), size=2) +
+  geom_point(data=a.bay.cuml.df, aes(x=day, y=cuml_propn, fill=bay), pch=21, size=4) +
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) + 
+  scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.85,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("") +   
+  xlab("Date")
+
+
+
+
+
+
+
+
+#------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+                                                #__________________________________________#
+                                                #    METHOD 3.2: Infilling with IA (M2)    #
+                                                #__________________________________________#
+
+
+#######################
+# 1. Create dataframe #
+#######################
+
+data <- read.csv("TEB_leftjoin.csv")      
+
+    # Create run time column
+    data <- data %>%
+      select(everything()) %>%
+      mutate_at(vars(c(17)), funs(as.character)) %>%
+      mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
+      mutate_at(vars(c(17)), funs(as.numeric)) %>%
+      mutate(run_time_s = run_time*60)
+
+# Calculate CPUE per run 
+data2 <- data %>%
+  filter(trap_type =="RST", sockeye_fry_total != "NR") %>%
+  group_by(USID, date) %>%
+  summarize(unq_SO = unique(sockeye_smolt_total), run_time = unique(run_time_s)) %>%
+  mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                 ifelse(run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
+                                 ifelse(run_time=="1080", "2238.905",
+                                 ifelse(run_time=="1140", "2363.288",
+                                 ifelse(run_time=="1200", "2487.672",
+                                 ifelse(run_time=="1260", "2612.056",
+                                 ifelse(run_time=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(CPUE = unq_SO/fished_vol) %>%
+  print()
+
+data2<-data2 %>% 
+  select(-fished_vol, -run_time, -USID) %>% 
+  print()
+
+
+# Average CPUE per day 
+data3 <- data2 %>% 
+  group_by(date) %>% 
+  summarize(mean_CPUE = mean(CPUE)) %>% 
+  print()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
