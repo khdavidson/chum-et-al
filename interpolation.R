@@ -1097,3 +1097,463 @@ ggplot() +
   xlab("Date")
 
 
+
+
+
+
+#####################################################################################################################################
+
+
+                                                  # Infilling mising current values - based on TS 
+
+data <- read.csv("TEB_leftjoin.csv")
+
+current <- data %>% 
+  filter(trap_type=="RST") %>%             
+  group_by(USID, date, set_start, bay) %>% 
+  summarize(current=unique(current_speed_mps)) %>% 
+  print()
+
+
+###
+# Fix start time 
+###
+
+current$set_start <- as.character(current$set_start)
+
+# Add zero to start of 3 digit numbers (i.e., 945 becomes 0945)
+current$set_start <- with_options(c(scipen = 999), str_pad(current$set_start, 4, pad = "0"))
+
+# Add colon after ever 2 digits
+current <- current %>% 
+  ungroup() %>%
+  mutate(set_start = gsub('(.{2})', '\\1:', set_start)) 
+
+    # Remove trailing colon
+    current$set_start <- str_sub(current$set_start, 1, str_length(current$set_start)-1)
+
+# Make as date-time (POSIXct) for minute intervals
+current$time <- paste(current$date, current$set_start, sep=" ")
+current$time <- as.POSIXct(current$time)
+
+# Omit the negative value 
+current[1108,5] <- NA
+
+  # Plot
+  ggplot(data=current, aes(x=time,y=current, fill=bay, group=bay, colour=bay)) +
+    geom_point(aes(fill=bay), colour="black", pch=21) +
+    geom_line(aes(colour=bay)) +
+    scale_x_datetime(breaks = "10 day", date_labels = "%h %d") 
+
+
+# Remove NAs - Must do this first for known values to detect breakpoints, or else NAs cause error
+current2 <- current %>% 
+  filter(current > 0) %>%
+  print()
+
+
+###
+# TS by bay
+###
+
+bay2 <- current2 %>% 
+  filter(bay=="B2") %>% 
+  mutate_at(vars(c(3)), funs(as.factor)) %>%
+  mutate(datetime = paste(date, set_start, sep=" ")) %>% 
+  mutate_at(vars(c(7)), funs(as.factor))
+
+bay6 <- current2 %>% 
+  filter(bay=="B6") %>% 
+  select(-bay)
+
+bay11 <- current2 %>% 
+  filter(bay=="B11") %>% 
+  select(-bay)
+
+# As time series 
+b2.current.ts <- ts(bay2$current)
+b6.current.ts <- ts(bay6$current)
+b11.current.ts <- ts(bay11$current)
+
+###
+# Detect breaks
+###
+
+# Detect breaks 
+b2.bp <- breakpoints(b2.current.ts ~ 1)
+b2.ci <- confint(b2.bp)
+summary(b2.bp)
+summary(b2.ci)
+      # Bay 2 breakpoints are at entries: 203 and 359
+
+b6.bp <- breakpoints(b6.current.ts ~ 1)
+b6.ci <- confint(b6.bp)
+summary(b6.bp)
+      # Bay 6 breakpoints are at entries: 143,210,278,346
+
+b11.bp <- breakpoints(b11.current.ts ~ 1)
+b11.ci <- confint(b11.bp)
+summary(b11.bp) 
+      # Bay 11 breakpoints are at entries: 209, 317
+
+# Plot breakpoints with confidence intervals
+plot(b2.current.ts)
+lines(b2.bp, col="red")
+lines(b2.ci)
+
+plot(b6.current.ts)
+lines(b6.bp, col="red")
+lines(b6.ci, col="red")
+
+plot(b11.current.ts)
+lines(b11.bp, col="red")
+lines(b11.ci)
+
+# Create dataframes from time series so that can x-ref breakpoints with actual dates/times 
+bay2.date <- bay2$time
+bay2.df <- as.data.frame(b2.current.ts)
+bay2.df <- cbind(bay2.df, bay2.date)
+      # Entry 203 corresponds to: 2017-05-05 09:58:00
+      # Entry 359 corresponds to: 2017-05-28 09:14:00     # bigger conf int
+
+bay6.date <- bay6$time
+bay6.df <- as.data.frame(b6.current.ts)
+bay6.df <- cbind(bay6.df, bay6.date)
+      # Entry 143 corresponds to: 2017-04-26 06:13:00
+      # Entry 210 corresponds to: 2017-05-05 09:08:00
+      # Entry 278 corresponds to: 2017-05-16 10:50:00     # bigger conf int
+      # Entry 346 corresponds to: 2017-05-26 13:23:00     # bigger conf int
+
+bay11.date <- bay11$time
+bay11.df <- as.data.frame(b11.current.ts)
+bay11.df <- cbind(bay11.df, bay11.date)
+      # Entry 209 corresponds to: 2017-05-05 08:22:00
+      # Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
+
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++ \/ Not really viable \/ 
+# INTERPOLATE: BAY 2 example 
+
+###
+# CREATE SUBSETS BASED ON BREAKPOINTS 
+###
+bay2.br1 <- current %>%
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 09:58:00"))
+
+bay2.br2 <- current %>% 
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-05-05 09:58:00") & time <= as.POSIXct("2017-05-28 09:14:00"))
+
+bay2.br3 <- current %>% 
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-05-28 09:14:00") & time <= as.POSIXct("2017-06-14 12:25:00"))
+
+###
+# As time series 
+###
+bay2.br1 <- bay2.br1 %>%
+  select(-c(USID,date,set_start,bay))
+
+bay2.br1.ts <- ts(bay2.br1.ts$current)
+
+###
+# INTERPOLATE 
+###
+# Summary stats on NAs using imputeTS() package
+statsNA(bay2.br1.ts)
+
+# Calculate imputations - Bay 2
+mean.bay2 <- na.mean(bay2.br1.ts)
+med.bay2 <- na.mean(bay2.br1.ts, option = "median")
+int.a.bay2 <- na.interpolation(bay2.br1.ts)
+
+# Plot imputations
+plotNA.imputations(bay2.br1.ts, int.st.bay2)
+
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# EXRACT MEAN/MEDIAN BASED ON TIME SLOT 
+
+######################################
+# BAY 2 SUBSETS BASED ON BREAKPOINTS #
+######################################
+
+ # Entry 203 corresponds to: 2017-05-05 09:58:00
+ # Entry 359 corresponds to: 2017-05-28 09:14:00     # bigger conf int
+
+###
+# Break 1
+###
+
+bay2.br1 <- current %>%
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 09:58:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay2.br1$time_round <- format(as.POSIXct(bay2.br1$time_round), format = "%H:%M:%S") 
+
+# Calculate mean/median current based on rough time slots to nearest half hour
+rtime2.1 <- bay2.br1 %>% 
+  group_by(time_round) %>% 
+  summarize(mean_curr = mean(current, na.rm=T), UL = mean_curr+sd(current, na.rm=T), LL = mean_curr-sd(current, na.rm=T),
+            median_curr = median(current, na.rm=T), n = n()) %>% 
+  print()
+    
+    # Plot histograms to see 
+    ggplot(data=bay2.br1, aes(x=current)) + 
+      geom_histogram(colour="black", fill="orange") +
+      facet_grid(time_round ~ .) +
+      scale_x_continuous(breaks=seq(0.1,0.9, by=0.05)) +
+      theme(panel.grid.major = element_line(colour="gray60"))
+
+# Apply median current estimates based on rounded time 
+bay2.br1 <- bay2.br1 %>% 
+  mutate(current_der = ifelse(is.na(current) & time_round=="06:30:00", "0.418", 
+                       ifelse(is.na(current) & time_round=="07:00:00", "0.529", 
+                       ifelse(is.na(current) & time_round=="07:30:00", "0.475",
+                       ifelse(is.na(current) & time_round=="08:00:00", "0.504",
+                       ifelse(is.na(current) & time_round=="08:30:00", "0.507",
+                       ifelse(is.na(current) & time_round=="09:00:00", "0.495",
+                       ifelse(is.na(current) & time_round=="09:30:00", "0.526",
+                       ifelse(is.na(current) & time_round=="10:00:00", "0.544",
+                       ifelse(is.na(current) & time_round=="10:30:00", "0.534",
+                       ifelse(is.na(current) & time_round=="11:00:00", "0.526",
+                       ifelse(is.na(current) & time_round=="11:30:00", "0.552",
+                       ifelse(is.na(current) & time_round=="12:30:00", "0.528",
+                       ifelse(is.na(current) & time_round=="13:00:00", "0.511", 
+                       ifelse(is.na(current) & time_round=="13:30:00", "0.570", current))))))))))))))) 
+
+###
+# Break 2 - no missing values! but create a dataframe anyway so to stack later 
+###
+bay2.br2 <- current %>%
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-05-05 09:58:00") & time <= as.POSIXct("2017-05-28 09:14:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
+  mutate(current_der = current)
+bay2.br2$time_round <- format(as.POSIXct(bay2.br2$time_round), format = "%H:%M:%S") 
+
+
+###
+# Break 3
+###
+bay2.br3 <- current %>% 
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-05-28 09:14:00") & time <= as.POSIXct("2017-06-14 12:25:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay2.br3$time_round <- format(as.POSIXct(bay2.br3$time_round), format = "%H:%M:%S") 
+bay2.br3[1,5] <- NA
+
+# Calculate mean/median current based on rough time slots to nearest half hour
+rtime2.3 <- bay2.br3 %>% 
+  group_by(time_round) %>% 
+  summarize(mean_curr = mean(current, na.rm=T), UL = mean_curr+sd(current, na.rm=T), LL = mean_curr-sd(current, na.rm=T),
+            median_curr = median(current, na.rm=T), n = n()) %>% 
+  print()
+
+# Apply median current estimates based on rounded time 
+bay2.br3 <- bay2.br3 %>% 
+  mutate(current_der = ifelse(is.na(current) & time_round=="09:00:00", "0.818", 
+                       ifelse(is.na(current) & time_round=="10:30:00", "0.843", current)))
+
+
+
+
+######################################
+# BAY 6 SUBSETS BASED ON BREAKPOINTS #
+######################################
+
+# Entry 143 corresponds to: 2017-04-26 06:13:00
+# Entry 210 corresponds to: 2017-05-05 09:08:00
+# Entry 278 corresponds to: 2017-05-16 10:50:00     # bigger conf int
+# Entry 346 corresponds to: 2017-05-26 13:23:00     # bigger conf int
+
+###
+# Break 1
+###
+bay6.br1 <- current %>%
+  filter(bay=="B6") %>% 
+  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-04-26 06:13:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay6.br1$time_round <- format(as.POSIXct(bay6.br1$time_round), format = "%H:%M:%S") 
+
+# Calculate mean/median current based on rough time slots to nearest half hour
+rtime6.1 <- bay6.br1 %>% 
+  group_by(time_round) %>% 
+  summarize(mean_curr = mean(current, na.rm=T), UL = mean_curr+sd(current, na.rm=T), LL = mean_curr-sd(current, na.rm=T),
+            median_curr = median(current, na.rm=T), n = n()) %>% 
+  print()
+    
+    # Plot histograms to see 
+    ggplot(data=bay6.br1, aes(x=current)) + 
+      geom_histogram(colour="black", fill="hot pink") +
+      facet_grid(time_round ~ .) +
+      scale_x_continuous(breaks=seq(0.1,0.9, by=0.05)) +
+      theme(panel.grid.major = element_line(colour="gray60"))
+
+# Apply median current estimates based on rounded time 
+bay6.br1 <- bay6.br1 %>% 
+  mutate(current_der = ifelse(is.na(current) & time_round=="06:30:00", "0.667", 
+                       ifelse(is.na(current) & time_round=="07:30:00", "0.697",
+                       ifelse(is.na(current) & time_round=="08:30:00", "0.758",
+                       ifelse(is.na(current) & time_round=="09:30:00", "0.737",
+                       ifelse(is.na(current) & time_round=="10:30:00", "0.746",
+                       ifelse(is.na(current) & time_round=="11:00:00", "0.826",
+                       ifelse(is.na(current) & time_round=="11:30:00", "0.815",
+                       ifelse(is.na(current) & time_round=="12:00:00", "0.833",   
+                       ifelse(is.na(current) & time_round=="12:30:00", "0.794",
+                       ifelse(is.na(current) & time_round=="13:30:00", "0.828", current)))))))))))
+
+###
+# Break 2
+###
+bay6.br2 <- current %>%
+  filter(bay=="B6") %>% 
+  filter(time >= as.POSIXct("2017-04-26 06:13:00") & time <= as.POSIXct("2017-05-05 09:08:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay6.br2$time_round <- format(as.POSIXct(bay6.br2$time_round), format = "%H:%M:%S") 
+
+###
+# Break 3
+###
+bay6.br3 <- current %>%
+  filter(bay=="B6") %>% 
+  filter(time >= as.POSIXct("2017-05-05 09:08:00") & time <= as.POSIXct("2017-05-16 10:50:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay6.br3$time_round <- format(as.POSIXct(bay6.br3$time_round), format = "%H:%M:%S")
+
+###
+# Break 4
+###
+bay6.br4 <- current %>%
+  filter(bay=="B6") %>% 
+  filter(time >= as.POSIXct("2017-05-16 10:50:00") & time <= as.POSIXct("2017-05-26 13:23:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay6.br4$time_round <- format(as.POSIXct(bay6.br4$time_round), format = "%H:%M:%S")
+
+###
+# Break 5
+###
+bay6.br5 <- current %>%
+  filter(bay=="B6") %>% 
+  filter(time >= as.POSIXct("2017-05-26 13:23:00") & time <= as.POSIXct("2017-06-14 11:40:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay6.br5$time_round <- format(as.POSIXct(bay6.br5$time_round), format = "%H:%M:%S")
+
+
+
+
+
+#######################################
+# BAY 11 SUBSETS BASED ON BREAKPOINTS #
+#######################################
+
+# Entry 209 corresponds to: 2017-05-05 08:22:00
+# Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
+
+###
+# Break 1
+###
+bay11.br1 <- current %>%
+  filter(bay=="B11") %>% 
+  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 08:22:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay11.br1$time_round <- format(as.POSIXct(bay11.br1$time_round), format = "%H:%M:%S") 
+
+# Calculate mean/median current based on rough time slots to nearest half hour
+rtime11.1 <- bay11.br1 %>% 
+  group_by(time_round) %>% 
+  summarize(mean_curr = mean(current, na.rm=T), UL = mean_curr+sd(current, na.rm=T), LL = mean_curr-sd(current, na.rm=T),
+            median_curr = median(current, na.rm=T), n = n()) %>% 
+  print()
+    
+    # Plot histograms to see 
+    ggplot(data=bay11.br1, aes(x=current)) + 
+      geom_histogram(colour="black", fill="turquoise") +
+      facet_grid(time_round ~ .) +
+      scale_x_continuous(breaks=seq(0.1,1.9, by=0.05)) +
+      theme(panel.grid.major = element_line(colour="gray60"))
+
+# Apply median current estimates based on rounded time 
+bay11.br1 <- bay11.br1 %>% 
+  mutate(current_der = ifelse(is.na(current) & time_round=="07:00:00", "0.368",
+                       ifelse(is.na(current) & time_round=="07:30:00", "0.429",
+                       ifelse(is.na(current) & time_round=="08:00:00", "0.537",
+                       ifelse(is.na(current) & time_round=="08:30:00", "0.477",
+                       ifelse(is.na(current) & time_round=="09:00:00", "0.416",
+                       ifelse(is.na(current) & time_round=="09:30:00", "0.481",
+                       ifelse(is.na(current) & time_round=="10:00:00", "0.498",
+                       ifelse(is.na(current) & time_round=="11:00:00", "0.458",
+                       ifelse(is.na(current) & time_round=="11:30:00", "0.465",
+                       ifelse(is.na(current) & time_round=="12:00:00", "0.541",
+                       ifelse(is.na(current) & time_round=="12:30:00", "0.536",
+                       ifelse(is.na(current) & time_round=="13:00:00", "0.492", current)))))))))))))
+
+#####
+# Break 2
+#####
+bay11.br2 <- current %>%
+  filter(bay=="B11") %>% 
+  filter(time >= as.POSIXct("2017-05-05 08:22:00") & time <= as.POSIXct("2017-05-22 09:55:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
+  mutate(current_der = current)
+bay11.br2$time_round <- format(as.POSIXct(bay11.br2$time_round), format = "%H:%M:%S") 
+
+
+#####
+# Break 3
+#####
+bay11.br3 <- current %>%
+  filter(bay=="B11") %>% 
+  filter(time >= as.POSIXct("2017-05-22 09:55:00") & time <= as.POSIXct("2017-06-14 12:02:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay11.br3$time_round <- format(as.POSIXct(bay11.br3$time_round), format = "%H:%M:%S") 
+
+# Calculate mean/median current based on rough time slots to nearest half hour
+rtime11.3 <- bay11.br3 %>% 
+  group_by(time_round) %>% 
+  summarize(mean_curr = mean(current, na.rm=T), UL = mean_curr+sd(current, na.rm=T), LL = mean_curr-sd(current, na.rm=T),
+            median_curr = median(current, na.rm=T), n = n()) %>% 
+  print()
+    
+    # Plot histograms to see 
+    ggplot(data=bay11.br3, aes(x=current)) + 
+      geom_histogram(colour="black", fill="turquoise") +
+      facet_grid(time_round ~ .) +
+      scale_x_continuous(breaks=seq(0.1,1.9, by=0.05)) +
+      theme(panel.grid.major = element_line(colour="gray60"))
+
+# Apply median current estimates based on rounded time 
+bay11.br3 <- bay11.br3 %>% 
+  mutate(current_der = ifelse(is.na(current) & time_round=="13:00:00", "0.890", 
+                       ifelse(is.na(current) & time_round=="13:30:00", "0.932", current)))
+ 
+
+
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# STACK DATAFRAMES 
+names <- list(names(bay2.br1))
+
+b2.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay2.br1, bay2.br2, bay2.br3))    
+b6.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay6.br1, bay6.br2, bay6.br3, bay6.br4, bay6.br5))
+b11.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay11.br1, bay11.br2, bay11.br3))
+
+new.df <- Reduce(function(...) merge(..., all=TRUE), list(b2.new.df, b6.new.df, b11.new.df))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
