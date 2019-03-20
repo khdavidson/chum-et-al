@@ -18,7 +18,11 @@ library(ggpmisc)
 library(purrr)
 library(imputeTS)
 library(xts)
-
+library(magrittr)
+library(grid)
+library(gridExtra)
+library(chron)
+library(mice)
 
 # Read data
 data <- read.csv("TEB_leftjoin.csv")
@@ -1103,9 +1107,14 @@ ggplot() +
 
 #####################################################################################################################################
 
+#                                                 __________________________________________________
+#                                                 |                                                |
+#                                                 |  Infilling mising current values - based on TS |
+#                                                 |________________________________________________|
 
-                                                  # Infilling mising current values - based on TS 
-
+                                                              ####################
+                                                              # DETECTING BREAKS #
+                                                              ####################
 data <- read.csv("TEB_leftjoin.csv")
 
 current <- data %>% 
@@ -1114,11 +1123,9 @@ current <- data %>%
   summarize(current=unique(current_speed_mps)) %>% 
   print()
 
-
-###
+####
 # Fix start time 
-###
-
+####
 current$set_start <- as.character(current$set_start)
 
 # Add zero to start of 3 digit numbers (i.e., 945 becomes 0945)
@@ -1152,9 +1159,9 @@ current2 <- current %>%
   print()
 
 
-###
+####
 # TS by bay
-###
+####
 
 bay2 <- current2 %>% 
   filter(bay=="B2") %>% 
@@ -1175,9 +1182,9 @@ b2.current.ts <- ts(bay2$current)
 b6.current.ts <- ts(bay6$current)
 b11.current.ts <- ts(bay11$current)
 
-###
+####
 # Detect breaks
-###
+####
 
 # Detect breaks 
 b2.bp <- breakpoints(b2.current.ts ~ 1)
@@ -1196,18 +1203,123 @@ b11.ci <- confint(b11.bp)
 summary(b11.bp) 
       # Bay 11 breakpoints are at entries: 209, 317
 
-# Plot breakpoints with confidence intervals
-plot(b2.current.ts)
-lines(b2.bp, col="red")
-lines(b2.ci)
 
+#####
+# Plot
+#####
+# BAY 2
+plot(b2.current.ts, ylab="Current velocity (m/s)")
+lines(b2.ci, col="red")
+lines(b2.bp, col="red")
+
+date.labels=c("Apr 03","Apr 20", "May 04", "May 19", "Jun 08")
+
+b2<-autoplot(b2.current.ts, ts.size=2, ts.colour="#f0992d")  + 
+  geom_vline(xintercept=c(203,359), size=1.5, col="red", linetype="dashed") +
+  geom_errorbarh(aes(xmax = b2.ci$confint[1,2] + 2, xmin = b2.ci$confint[1,2] - 3, y=0, 
+                     height=0.2), size=2, col="red") +
+  geom_errorbarh(aes(xmax = b2.ci$confint[2,2] + 1, xmin = b2.ci$confint[2,2] - 26, y=0, 
+                     height=0.2), size=2, col="red") +
+  scale_x_continuous(breaks=seq(0,400,by=100), labels=date.labels) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.85,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("") +   
+  xlab("")
+
+# BAY 6
 plot(b6.current.ts)
 lines(b6.bp, col="red")
 lines(b6.ci, col="red")
 
+date.labels=c("Apr 03","Apr 20", "May 04", "May 19", "Jun 08")
+
+b6<-autoplot(b6.current.ts, ts.size=2, ts.colour="#81a926")  + 
+  geom_vline(xintercept=c(143,210,278,346), size=1.5, col="red", linetype="dashed") +
+  geom_errorbarh(aes(xmax = b6.ci$confint[1,2] + 6, xmin = b6.ci$confint[1,2] - 4, y=0, 
+                     height=0.2), size=2, col="red") +
+  geom_errorbarh(aes(xmax = b6.ci$confint[2,2] + 1, xmin = b6.ci$confint[2,2] - 1, y=0, 
+                     height=0.2), size=2, col="red") +
+  geom_errorbarh(aes(xmax = b6.ci$confint[3,2] + 10, xmin = b6.ci$confint[3,2] - 27, y=0, 
+                     height=0.2), size=2, col="red") +
+  geom_errorbarh(aes(xmax = b6.ci$confint[4,2] + 7, xmin = b6.ci$confint[4,2] - 28, y=0, 
+                     height=0.2), size=2, col="red") +
+  scale_x_continuous(breaks=seq(0,400,by=100), labels=date.labels) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.85,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("Current velocity (m/s)") +   
+  xlab("")
+
+# BAY 11
 plot(b11.current.ts)
 lines(b11.bp, col="red")
 lines(b11.ci)
+
+date.labels=c("Apr 03","Apr 20", "May 04", "May 19", "Jun 08")
+
+b11<-autoplot(b2.current.ts, ts.size=2, ts.colour="#0059d1")  + 
+  geom_vline(xintercept=c(209,317), size=1.5, col="red", linetype="dashed") +
+  geom_errorbarh(aes(xmax = b11.ci$confint[1,2] + 2, xmin = b11.ci$confint[1,2] - 1, y=0, 
+                     height=0.2), size=2, col="red") +
+  geom_errorbarh(aes(xmax = b11.ci$confint[2,2] + 6, xmin = b11.ci$confint[2,2] - 8, y=0, 
+                     height=0.2), size=2, col="red") +
+  scale_x_continuous(breaks=seq(0,400,by=100), labels=date.labels) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.85,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("") +   
+  xlab("Date")
+
+grid.newpage()
+grid.draw(rbind(ggplotGrob(b2), ggplotGrob(b6), ggplotGrob(b11),size="last"))
+
+
+####
+# as.data.frame
+####
 
 # Create dataframes from time series so that can x-ref breakpoints with actual dates/times 
 bay2.date <- bay2$time
@@ -1231,49 +1343,12 @@ bay11.df <- cbind(bay11.df, bay11.date)
       # Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
 
 
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++ \/ Not really viable \/ 
-# INTERPOLATE: BAY 2 example 
+#----------------------------------------------------------------------------------------------------------------------
 
-###
-# CREATE SUBSETS BASED ON BREAKPOINTS 
-###
-bay2.br1 <- current %>%
-  filter(bay=="B2") %>% 
-  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 09:58:00"))
+                                      ###################################################
+                                      # INFILL: Mean/median based on breaks + time slot #
+                                      ###################################################
 
-bay2.br2 <- current %>% 
-  filter(bay=="B2") %>% 
-  filter(time >= as.POSIXct("2017-05-05 09:58:00") & time <= as.POSIXct("2017-05-28 09:14:00"))
-
-bay2.br3 <- current %>% 
-  filter(bay=="B2") %>% 
-  filter(time >= as.POSIXct("2017-05-28 09:14:00") & time <= as.POSIXct("2017-06-14 12:25:00"))
-
-###
-# As time series 
-###
-bay2.br1 <- bay2.br1 %>%
-  select(-c(USID,date,set_start,bay))
-
-bay2.br1.ts <- ts(bay2.br1.ts$current)
-
-###
-# INTERPOLATE 
-###
-# Summary stats on NAs using imputeTS() package
-statsNA(bay2.br1.ts)
-
-# Calculate imputations - Bay 2
-mean.bay2 <- na.mean(bay2.br1.ts)
-med.bay2 <- na.mean(bay2.br1.ts, option = "median")
-int.a.bay2 <- na.interpolation(bay2.br1.ts)
-
-# Plot imputations
-plotNA.imputations(bay2.br1.ts, int.st.bay2)
-
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# EXRACT MEAN/MEDIAN BASED ON TIME SLOT 
 
 ######################################
 # BAY 2 SUBSETS BASED ON BREAKPOINTS #
@@ -1290,7 +1365,8 @@ bay2.br1 <- current %>%
   filter(bay=="B2") %>% 
   filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 09:58:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
-bay2.br1$time_round <- format(as.POSIXct(bay2.br1$time_round), format = "%H:%M:%S") 
+bay2.br1$time_round <- format(as.POSIXct(bay2.br1$time_round), format = "%H:%M:%S")
+bay2.br1$jdat <- julian(bay2.br1$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 # Calculate mean/median current based on rough time slots to nearest half hour
 rtime2.1 <- bay2.br1 %>% 
@@ -1323,8 +1399,12 @@ bay2.br1 <- bay2.br1 %>%
                        ifelse(is.na(current) & time_round=="13:00:00", "0.511", 
                        ifelse(is.na(current) & time_round=="13:30:00", "0.570", current))))))))))))))) 
 
+# Create lm 
+summary(lm(bay2.br1$current_der ~ bay2.br1$jdat))
+AICc(lm(bay2.br1$current_der ~ bay2.br1$jdat))
+
 ###
-# Break 2 - no missing values! but create a dataframe anyway so to stack later 
+# Break 2 - No missing values  
 ###
 bay2.br2 <- current %>%
   filter(bay=="B2") %>% 
@@ -1332,7 +1412,6 @@ bay2.br2 <- current %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
   mutate(current_der = current)
 bay2.br2$time_round <- format(as.POSIXct(bay2.br2$time_round), format = "%H:%M:%S") 
-
 
 ###
 # Break 3
@@ -1405,7 +1484,7 @@ bay6.br1 <- bay6.br1 %>%
                        ifelse(is.na(current) & time_round=="13:30:00", "0.828", current)))))))))))
 
 ###
-# Break 2
+# Break 2 - No missing values 
 ###
 bay6.br2 <- current %>%
   filter(bay=="B6") %>% 
@@ -1414,7 +1493,7 @@ bay6.br2 <- current %>%
 bay6.br2$time_round <- format(as.POSIXct(bay6.br2$time_round), format = "%H:%M:%S") 
 
 ###
-# Break 3
+# Break 3 - No missing values 
 ###
 bay6.br3 <- current %>%
   filter(bay=="B6") %>% 
@@ -1423,7 +1502,7 @@ bay6.br3 <- current %>%
 bay6.br3$time_round <- format(as.POSIXct(bay6.br3$time_round), format = "%H:%M:%S")
 
 ###
-# Break 4
+# Break 4 - No missing values
 ###
 bay6.br4 <- current %>%
   filter(bay=="B6") %>% 
@@ -1432,7 +1511,7 @@ bay6.br4 <- current %>%
 bay6.br4$time_round <- format(as.POSIXct(bay6.br4$time_round), format = "%H:%M:%S")
 
 ###
-# Break 5
+# Break 5 - No missing values
 ###
 bay6.br5 <- current %>%
   filter(bay=="B6") %>% 
@@ -1490,7 +1569,7 @@ bay11.br1 <- bay11.br1 %>%
                        ifelse(is.na(current) & time_round=="13:00:00", "0.492", current)))))))))))))
 
 #####
-# Break 2
+# Break 2 - No missing values 
 #####
 bay11.br2 <- current %>%
   filter(bay=="B11") %>% 
@@ -1498,7 +1577,6 @@ bay11.br2 <- current %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
   mutate(current_der = current)
 bay11.br2$time_round <- format(as.POSIXct(bay11.br2$time_round), format = "%H:%M:%S") 
-
 
 #####
 # Break 3
@@ -1530,9 +1608,9 @@ bay11.br3 <- bay11.br3 %>%
  
 
 
-
-#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# STACK DATAFRAMES 
+####################
+# STACK DATAFRAMES #
+####################
 names <- list(names(bay2.br1))
 
 b2.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay2.br1, bay2.br2, bay2.br3))    
@@ -1540,6 +1618,198 @@ b6.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay6.br1, bay6.br2,
 b11.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay11.br1, bay11.br2, bay11.br3))
 
 new.df <- Reduce(function(...) merge(..., all=TRUE), list(b2.new.df, b6.new.df, b11.new.df))
+
+
+
+
+#----------------------------------------------------------------------------------------------------------------------
+
+                                            #########################################
+                                            # INFILL: mice(methods) based on breaks #
+                                            #########################################
+
+######################################
+# BAY 2 SUBSETS BASED ON BREAKPOINTS #
+######################################
+
+ # Entry 203 corresponds to: 2017-05-05 09:58:00
+ # Entry 359 corresponds to: 2017-05-28 09:14:00     # bigger conf int
+
+####
+# Break 1: 2017-04-03 09:29:00 - 2017-05-05 09:58:00
+####
+
+bay2.br1 <- current %>%
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 09:58:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay2.br1$time_round <- format(as.POSIXct(bay2.br1$time_round), format = "%H:%M:%S") 
+bay2.br1$jdat <- julian(bay2.br1$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
+
+# Linear model without NAs
+lm2.1 <- lm(bay2.br1$current~bay2.br1$jdat)
+r1<-resid(lm2.1)
+plot(r1)
+hist(r1)
+
+# subset data to remove variables not needed for prediction 
+bay2.br1 <- bay2.br1 %>% 
+  select(-c(USID,date,set_start,bay,time, time_round))
+
+# MICE
+init <- mice(bay2.br1, maxit=0) 
+predM <- init$predictorMatrix     # Set predictor matrix
+predM[c("current")]=0             # signify variables not to be considered as predictors but will be imputed
+meth[c("ftime")]=""               # signify variables that don't need to be imputed but will be used as predictors 
+
+    # Impute: pmm
+    imp.pmm = mice(bay2.br1, method="pmm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pmm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pmm, ~current)                       
+        # Model results for imputed values only 
+        model.pmm <- with(imp.pmm, lm(current ~ jdat))
+        summary(model.pmm)
+        summary(pool(model.pmm))
+        # Model results with completed dataset 
+        comp.pmm <- complete(imp.pmm)
+        summary(lm(comp.pmm$current ~ comp.pmm$jdat))
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))              # AICc = -433.0133
+
+    
+    #Impute: norm.predict
+    imp.pnorm = mice(bay2.br1, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pnorm, ~current)                       
+        # Model results for imputed values 
+        model.pnorm <- with(imp.pnorm, lm(current ~ jdat))
+        summary(model.pnorm)
+        summary(pool(model.pnorm))
+        # Model results with completed dataset 
+        comp.pnorm <- complete(imp.pnorm)
+        summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
+        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              # AICc = -434.4665
+
+
+    # Impute: Bayesian linear regression
+    imp.bays = mice(bay2.br1, method="norm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.bays, current ~ jdat, scales="free")
+    densityplot(imp.bays, ~current)
+        # Model results for imputed values 
+        model.bayes <- with(imp.bays, lm(current ~ jdat))
+        summary(model.bayes)
+        summary(pool(model.bayes))
+        # Model results with completed dataset
+        comp.pbayes <- complete(imp.bays)
+        summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
+        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              # AICc = -420.8414
+
+
+
+
+###
+# Break 2: No missing values  
+###
+bay2.br2 <- current %>%
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-05-05 09:58:00") & time <= as.POSIXct("2017-05-28 09:14:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
+  mutate(current_der = current)
+bay2.br2$time_round <- format(as.POSIXct(bay2.br2$time_round), format = "%H:%M:%S") 
+
+
+###
+# Break 3: 2017-05-28 09:14:00 - 2017-06-14 12:25:00
+###
+bay2.br3 <- current %>% 
+  filter(bay=="B2") %>% 
+  filter(time >= as.POSIXct("2017-05-28 09:14:00") & time <= as.POSIXct("2017-06-14 12:25:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay2.br3$time_round <- format(as.POSIXct(bay2.br3$time_round), format = "%H:%M:%S") 
+bay2.br3[1,5] <- NA
+bay2.br3$jdat <- julian(bay2.br3$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
+
+# Linear model without NAs
+lm2.3 <- lm(bay2.br3$current~bay2.br3$jdat)
+r1<-resid(lm2.3)
+plot(r1)
+hist(r1)
+qqnorm(r1)
+qqline(r1)
+
+# subset data to remove variables not needed for prediction 
+bay2.br3 <- bay2.br3 %>% 
+  select(-c(USID,date,set_start,bay,time, time_round))
+
+# MICE
+init <- mice(bay2.br3, maxit=0) 
+predM <- init$predictorMatrix     # Set predictor matrix
+predM[c("current")]=0             # signify variables not to be considered as predictors but will be imputed
+meth[c("ftime")]=""               # signify variables that don't need to be imputed but will be used as predictors 
+
+    # Impute: pmm
+    imp.pmm = mice(bay2.br3, method="pmm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pmm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pmm, ~current)                       
+        # Model results for imputed values only 
+        model.pmm <- with(imp.pmm, lm(current ~ jdat))
+        summary(model.pmm)
+        summary(pool(model.pmm))
+        # Model results with completed dataset 
+        comp.pmm <- complete(imp.pmm)
+        summary(lm(comp.pmm$current ~ comp.pmm$jdat))
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))            
+
+    
+    #Impute: norm.predict
+    imp.pnorm = mice(bay2.br3, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pnorm, ~current)                       
+        # Model results for imputed values 
+        model.pnorm <- with(imp.pnorm, lm(current ~ jdat))
+        summary(model.pnorm)
+        summary(pool(model.pnorm))
+        # Model results with completed dataset 
+        comp.pnorm <- complete(imp.pnorm)
+        summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
+        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))            
+
+
+    # Impute: Bayesian linear regression
+    imp.bays = mice(bay2.br3, method="norm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.bays, current ~ jdat, scales="free")
+    densityplot(imp.bays, ~current)
+        # Model results for imputed values 
+        model.bayes <- with(imp.bays, lm(current ~ jdat))
+        summary(model.bayes)
+        summary(pool(model.bayes))
+        # Model results with completed dataset
+        comp.pbayes <- complete(imp.bays)
+        summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
+        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
