@@ -21,6 +21,15 @@ library(AER)       # dispersiontest
 library(tidyr)
 
 
+# Variables: 
+  # Response: CPUE (fish/m3)
+  # Predictors: current velocity (interpolated some values, see "interpolation.R"), TOD, month, bay
+  #   (Future predictors may also include trap type, year, depth)
+
+
+
+
+
 # Set up database to work with
 df <- data %>% 
   select(USID, date, run, bay, trap_type, current_speed_mps, set_start, run_time, sockeye_smolt_total) %>% 
