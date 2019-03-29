@@ -13,6 +13,7 @@
 ####################################################################################################################################
 
 setwd("~/`Stock assessment/Analysis/Data files")
+setwd("~/DFO BI02 Stock assessment data analysis/Analysis/Data files")
 
 # Libraries
 library(dplyr)
@@ -77,8 +78,9 @@ cur.int <- cur.int %>%
   mutate_at(vars(c(2)), funs(as.character)) %>%
   mutate(date = lubridate::dmy(date))
 
+df$date <- as.Date(df$date)
+
 df <- df %>% 
-  mutate_at(vars(c(2)), funs(as.Date)) %>% 
   rename(current = current_vel)
 
 db <- left_join(df, cur.int, by=c("USID", "date", "bay", "current"))
@@ -92,10 +94,38 @@ db$month <- as.factor(db$month)
 
 #-----------------------------------------------------------------------------------------------------------------------------------
 
+#
+# Add colon after ever 2 digits
+db <- db %>% 
+  ungroup() %>%
+  mutate(start = gsub('(.{2})', '\\1:', start)) %>%
+  mutate(end = gsub('(.{2})', '\\1:', end))
+
+# Remove trailing colon
+db$start <- str_sub(db$start, 1, str_length(db$start)-1)
+db$end <- str_sub(db$end, 1, str_length(db$end)-1)
+
+# Make as date-time (POSIXct) for minute intervals
+db$date_start = as.POSIXct(paste(db$date, db$start),tz = "")
+db$date_end = as.POSIXct(paste(db$date, db$end),tz = "")
+
+db$USID <- as.factor(db$USID)
+
+
 # Merge expanded table and db *******
+exp <- read.csv("mission_SO_CPUE_matrix.csv")
+exp <- exp %>%
+  gather(bay, "CPUE", starts_with("bay")) %>%
+  rename(date_start = value) %>% 
+  mutate(bay = ifelse(bay=="bay2", "B2",
+               ifelse(bay=="bay6", "B6", "B11")))
+exp$date_start <- as.POSIXct(exp$date_start)
+exp$bay <- as.factor(exp$bay)
 
+db.exp <- left_join(exp, db, by=c("USID", "bay", "CPUE"))
 
-
+db.comp <- db.exp %>% 
+  na.omit()
 
 #-----------------------------------------------------------------------------------------------------------------------------------
 
@@ -105,8 +135,28 @@ db$month <- as.factor(db$month)
 
 
 # Create global model to assess diagnostic plots 
-m.global <- glm(CPUE ~ current_imp + date + bay + TOD, data=db, family=gaussian(link="identity"))
+m.global <- glm(CPUE ~ current_imp + date + bay + start, data=db, family=gaussian(link="identity"))
+summary(m.global)
 plot(m.global)
+
+pred.1 <- predict(m.global, type="response")
+
+impute <- function (a, a.impute){ 
+  ifelse (is.na(a), a.impute, a)
+}
+
+CPUE.imp.1 <- impute(db.exp$CPUE, pred.1)
+
+
+
+
+
+
+
+
+
+
+
     # Extreme pattern in residuals 
     # Clear right-skew of normal QQ
     # Leverage apparent
