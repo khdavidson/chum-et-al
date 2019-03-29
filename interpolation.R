@@ -1,3 +1,10 @@
+# KD 
+# Mar 29, 2019
+
+# This code deals with imputing missing CPUE values with different methods - primarily using 'imputeTS', and also some very 
+  # preliminary stuff using GLMs and multiple imputation ('mice' package). 
+
+
 # Set wd 
 setwd("~/`Stock assessment/Analysis/Data files")
 
@@ -47,18 +54,13 @@ data <- data %>%
 
 #######################################################################################################################################
 
+                                        #_____________________________________________________#
+                                        # RAW DATA TO DETERMINE DISTRIBUTION, AUTOCORRELATION #
+                                        #_____________________________________________________#
 
-
-                                                #_________________________________________#
-                                                #    METHOD 3.1: Infilling with CPUE      #
-                                                #_________________________________________#
-
-
-#++++++++++++++++++++++++++++++++++++++++++++++ RAW DATA 
-
-#######################
-# 1. Create dataframe #
-#######################
+####################
+# Create dataframe #
+####################
 
 data <- read.csv("TEB_leftjoin.csv")      
 
@@ -96,9 +98,9 @@ data3 <- data2 %>%
   summarize(mean_CPUE = mean(CPUE)) %>% 
   print()
 
-##########################
-# 2. Simple linear model #
-##########################
+#######################
+# Simple linear model #
+#######################
 
 lm1 <- lm(data3$mean_CPUE ~ data3$date)
 r1 <- resid(lm1)
@@ -113,15 +115,20 @@ plot(lm1)
   # It is also important to assess whether autocorrelation exists within the data, which I will test below 
 
 
-######################
-# 3. Autocorrelation #
-######################
+###################
+# Autocorrelation #
+###################
 
-# There seem to be a couple of ways to potentially asses this, so I will highlight what I have learned... 
+# There seem to be a couple of ways to potentially asses this
+# Some resources used: 
+  # tslm() models: http://rpubs.com/Mentors_Ubiqum/tslm)
+  # arima() models: https://newonlinecourses.science.psu.edu/stat510/node/67/
+  # To plot time series using ggplot: http://www.sthda.com/english/articles/32-r-graphics-essentials/128-plot-time-series-data-using-ggplot/
+  # Another resource to plot time series using ggplot: https://cran.r-project.org/web/packages/ggfortify/vignettes/plot_ts.html
+  # General understanding of time series data: https://people.maths.bris.ac.uk/~magpn/Research/LSTS/STSIntro.html
 
 ##
 # 1. CREATING TIME SERIES USING DAILY AVERAGE KNOWN CPUE (NOT USING MATRIX) 
-# (From: http://rpubs.com/Mentors_Ubiqum/tslm)
 ##
 
 # Make date as.POSIXct
@@ -244,12 +251,20 @@ ts_models %>%
     # ARIMA models fit better which indicates autocorrelation in dataset 
 
 
-#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ INTERPOLATED DATA
+
+#------------------------------------------------------------------------------------------------------------------------------------
+
+                                                #___________________________________________________#
+                                                #    METHOD 3: Infilling with CPUE and imputeTS     #
+                                                #___________________________________________________#
 
 
-#########################################
-# 3. ASSESS MISSING DATA IN CATCH TABLE #
-#########################################
+# Resources: 
+  # For imputeTS NA summary and infilling: https://cran.r-project.org/web/packages/imputeTS/vignettes/imputeTS-Time-Series-Missing-Value-Imputation-in-R.pdf
+
+########################################
+# Summarize missig data in catch table #
+########################################
 
 # Load catch table matrix
 matrix <- read.csv("mission_SO_CPUE_matrix.csv")
@@ -268,21 +283,14 @@ matrix <- read.csv("mission_SO_CPUE_matrix.csv")
       rename(date=value)
 
 # Create a time series for each Bay
-#z.bay2 <- read.zoo(file = matrix2, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
-#bay2.ts <- as.ts(z.bay2)                 # For some reason, while zoo() preserves the matrix fine, this call makes the ts wildy innacurrate - 6mil+ entries vs 104k which is what it is supposed to have. use ts() as below
 ts.b2 <- ts(matrix2$bay2)
-
-#z.bay6 <- read.zoo(file = matrix6, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
-#bay6.ts <- as.ts(z.bay6)
 ts.b6 <- ts(matrix6$bay6)
-
-#z.bay11 <- read.zoo(file = matrix11, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
-#bay11.ts <- as.ts(z.bay11)
 ts.b11 <- ts(matrix11$bay11)
 
-##
-# imputeTS()
-##
+###
+# Using imputeTS()
+###
+
 # Summary stats on NAs using imputeTS() package
 statsNA(ts.b2)
 statsNA(ts.b6)
@@ -302,9 +310,9 @@ plotNA.distributionBar(ts.b11, breaks = 20)
 plotNA.gapsize(ts.b11)
 
 
-#################################
-# 4. INTERPOLATE NAs - imputeTS #
-#################################
+#############################
+# Infill NAs using imputeTS #
+#############################
 
 # Calculate imputations - Bay 2
 mean.bay2 <- na.mean(ts.b2)
@@ -346,13 +354,13 @@ plotNA.imputations(ts.b11, kal.bay11)
 
 
 
-########################
-# 5. Export back to df #
-########################
+#####################
+# Export back to df #
+#####################
 
-##
-# Interp series 1 - approx
-##
+###
+# Infill series 1 using 'approx'
+###
 
 # Make as.df
 bay2.aint.df <- as.data.frame(int.a.bay2)
@@ -368,50 +376,13 @@ a.int.df <- cbind(USID, date, bay2.aint.df, bay6.aint.df, bay11.aint.df)
 names(a.int.df) <- c("USID", "date", "B2", "B6", "B11")
 
 
-##
-# Interp series 2 - spline
-##
+#######################
+# Summarize & compare #
+#######################
 
-# Make as.df
-bay2.spint.df <- as.data.frame(int.sp.bay2)
-bay6.spint.df <- as.data.frame(int.sp.bay6)
-bay11.spint.df <- as.data.frame(int.sp.bay11)
-
-# Row names from original matrix correspond to time series 
-date <- matrix$value
-USID <- matrix$USID
-
-# Bind
-sp.int.df <- cbind(USID, date, bay2.spint.df, bay6.spint.df, bay11.spint.df)
-names(sp.int.df) <- c("USID", "date", "B2", "B6", "B11")
-
-
-##
-# Interp series 2 - stine
-##
-
-# Make as.df
-bay2.stint.df <- as.data.frame(int.st.bay2)
-bay6.stint.df <- as.data.frame(int.st.bay6)
-bay11.stint.df <- as.data.frame(int.st.bay11)
-
-# Row names from original matrix correspond to time series 
-date <- matrix$value
-USID <- matrix$USID
-
-# Bind
-st.int.df <- cbind(USID, date, bay2.stint.df, bay6.stint.df, bay11.stint.df)
-names(st.int.df) <- c("USID", "date", "B2", "B6", "B11")
-
-
-##########################
-# 6. Summarize & compare #
-##########################
-
-##
+###
 # Interp series 1 - approx
-##
-
+###
 # Split dat-time column so that catch can be averaged for each bay, each day 
 a.bay.df <- a.int.df %>% 
   mutate(day = paste(date)) %>%
@@ -430,54 +401,9 @@ a.day.df <- a.int.df %>%
   summarize(mean_CPUE = mean(CPUE))
 
 
-##
-# Interp series 2 - spline
-##
-
-# Split dat-time column so that catch can be averaged for each bay, each day 
-sp.bay.df <- sp.int.df %>% 
-  mutate(day = paste(date)) %>%
-  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
-  group_by(day) %>% 
-  summarize(B2 = mean(B2), B6 = mean(B6), B11 = mean(B11)) %>%
-  gather(bay, CPUE, "B2", "B6", "B11", 2:4)
-
-
-# Same again but straight to daily average 
-sp.day.df <- sp.int.df %>% 
-  mutate(day = paste(date)) %>%
-  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
-  gather(bay, CPUE, "B2", "B6", "B11", 3:5) %>%  
-  group_by(day) %>% 
-  summarize(mean_CPUE = mean(CPUE))
-
-
-##
-# Interp series 3 - stine
-##
-
-# Split dat-time column so that catch can be averaged for each bay, each day 
-st.bay.df <- st.int.df %>% 
-  mutate(day = paste(date)) %>%
-  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
-  group_by(day) %>% 
-  summarize(B2 = mean(B2), B6 = mean(B6), B11 = mean(B11)) %>%
-  gather(bay, CPUE, "B2", "B6", "B11", 2:4)
-
-
-# Same again but straight to daily average 
-st.day.df <- st.int.df %>% 
-  mutate(day = paste(date)) %>%
-  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
-  gather(bay, CPUE, "B2", "B6", "B11", 3:5) %>%  
-  group_by(day) %>% 
-  summarize(mean_CPUE = mean(CPUE))
-
-
-
-##
+###
 # Raw series
-##
+###
 
 data <- read.csv("TEB_leftjoin.csv")      
     # Create run time column
@@ -516,10 +442,9 @@ bay.dat <- data2 %>%
   summarize(mean_CPUE = mean(CPUE))
 
 
-##
+###
 # PLOT: Normal temporal  
-##
-
+###
 # Plot by daily average CPUE 
 day.dat$date <- as.Date(day.dat$date)
 a.day.df$day <- as.Date(a.day.df$day)
@@ -555,7 +480,6 @@ ggplot() +
   ylab(expression(bold(paste("CPUE (fish/",m^3,")")))) +   
   xlab("")
 
-
 # Plot by daily average by BAY CPUE 
 bay.dat$date <- as.Date(bay.dat$date)
 a.bay.df$day <- as.Date(a.bay.df$day)
@@ -588,10 +512,10 @@ ggplot() +
   ylab(expression(bold(paste("CPUE (fish/",m^3,")")))) +   
   xlab("Date")
 
-##
-# PLOT: Cumulative temporal  
-##
 
+###
+# PLOT: Cumulative temporal  
+###
 # Daily raw CPUE
 day.cuml.dat <- day.dat %>% 
   mutate(cuml_CPUE = cumsum(mean_CPUE)) %>% 
@@ -613,7 +537,6 @@ a.bay.cuml.df <- a.bay.df %>%
   group_by(bay) %>%
   mutate(cuml_CPUE = cumsum(CPUE)) %>% 
   mutate(cuml_propn = cuml_CPUE/sum(CPUE))
-
 
 # Plot by daily cumulative CPUE 
 day.cuml.dat$date <- as.Date(day.cuml.dat$date)
@@ -650,8 +573,7 @@ ggplot() +
   ylab("") +   
   xlab("")
 
-
-# Plot by daily cumulative CPUE BY BAY!
+# Plot by daily cumulative CPUE BY BAY
 bay.cuml.dat$date <- as.Date(bay.cuml.dat$date)
 a.bay.cuml.df$day <- as.Date(a.bay.cuml.df$day)
 
@@ -687,6 +609,44 @@ ggplot() +
         legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
   ylab("") +   
   xlab("Date")
+
+
+
+#------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+                                                #_______________________________________________#
+                                                #    METHOD 3: Infilling with CPUE and mice     #
+                                                #_______________________________________________#
+
+
+db.exp <- read.csv("catchtable_CPUE_longform.csv")
+matrix <- read.csv("mission_SO_CPUE_matrix.csv")
+matrix <- matrix %>%
+  gather(bay, "CPUE", starts_with("bay"))
+
+# MICE
+init <- mice(matrix, maxit=0) 
+predM <- init$predictorMatrix     # Set predictor matrix
+predM[c("CPUE")]=0             # signify variables not to be considered as predictors but will be imputed
+method[c("USID", "value")]=c("", "", "", "pmm")           # signify variables that don't need to be imputed but will be used as predictors 
+
+    # Impute: pmm
+    imp.pmm = mice(matrix, method="pmm", m=5, seed=50, maxit=50)
+    xyplot(imp.pmm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pmm, ~current)                       
+        # Model results for imputed values only 
+        model.pmm <- with(imp.pmm, lm(current ~ jdat))
+        summary(model.pmm)
+        summary(pool(model.pmm))
+        # Model results with completed dataset 
+        comp.pmm <- complete(imp.pmm)
+        summary(lm(comp.pmm$current ~ comp.pmm$jdat))
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat)) 
+
+
+
 
 
 
@@ -699,423 +659,27 @@ ggplot() +
 
 
 
-                                                #______________________________________________________#
-                                                #        METHOD 3.2: Infilling with IA (M2)            #
-                                                #  (ignoring missing values due to missing velocity)   #
-                                                #______________________________________________________#
-
-
-#++++++++++++++++++++++++++++++++++++++++++++++++++++++++ RAw DATA
-
-#######################
-# 1. Create dataframe #
-#######################
-
-data <- read.csv("TEB_leftjoin.csv")      
-
-    # Create run time column
-    data <- data %>%
-      select(everything()) %>%
-      mutate_at(vars(c(17)), funs(as.character)) %>%
-      mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
-      mutate_at(vars(c(17)), funs(as.numeric)) %>%
-      mutate(run_time_s = run_time*60)
-
-# Calculate CPUE per run 
-data3.2.2 <- data %>%
-  filter(trap_type =="RST", sockeye_fry_total != "NR") %>%
-  group_by(USID, date) %>%
-  summarize(unq_SO = unique(sockeye_smolt_total), run_time = unique(run_time_s), velocity=unique(current_speed_mps)) %>%
-  mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
-                                 ifelse(run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
-                                 ifelse(run_time=="1080", "2238.905",
-                                 ifelse(run_time=="1140", "2363.288",
-                                 ifelse(run_time=="1200", "2487.672",
-                                 ifelse(run_time=="1260", "2612.056",
-                                 ifelse(run_time=="1320", "2736.439", "1865.71"))))))))) %>%
-  mutate(CPUE = unq_SO/fished_vol) %>%
-  mutate(bay_width = 440/3) %>%                                                                                                                           # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
-  mutate(bay_depth = 1.13) %>%                                                                                                                            # Bay depth for now is considered the RST fishing depth (1.13m)
-  mutate(bay_volume_m3 = bay_width*bay_depth*velocity*run_time) %>%                                                                                   # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
-  mutate(IA = CPUE*bay_volume_m3) 
-
-data3.2.2<-data3.2.2 %>% 
-  ungroup() %>%
-  select(-unq_SO, -fished_vol, -run_time, -USID, -velocity, -CPUE, -bay_width, -bay_depth, -bay_volume_m3) 
-
-# Average IA per day 
-data3.2.3 <- data3.2.2 %>% 
-  group_by(date) %>% 
-  summarize(mean_IA = mean(IA)) %>% 
-  print()
-
-
-#################################################################################
-#  I am going to skip sections on autocorrelation and model testing.            #
-#   Have already established the time series is autocorrelated, re-visiting     #
-#   with IA data would not change it. Also, the NAs introduced in the IA        #
-#   calculation due to missing velocity measurements require subsetting         #
-#   the data further, and I don't really feel like taking the time to do that!  #
-#################################################################################
-
-
-
-#########################################
-# 2. ASSESS MISSING DATA IN CATCH TABLE #
-#########################################
-
-# Load catch table matrix
-matrix <- read.csv("mission_SO_IA_matrix.csv")
-
-    # Bay 2 matrix
-    matrix2 <- matrix %>% 
-      select(value, bay2) %>% 
-      rename(date=value)
-    # Bay 6 matrix
-    matrix6 <- matrix %>% 
-      select(value, bay6) %>% 
-      rename(date=value)
-    # Bay 11 matrix
-    matrix11 <- matrix %>% 
-      select(value, bay11) %>% 
-      rename(date=value)
-
-# Create a time series for each Bay
-#z.bay2 <- read.zoo(file = matrix2, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
-#bay2.ts <- as.ts(z.bay2)                 # For some reason, while zoo() preserves the matrix fine, this call makes the ts wildy innacurrate - 6mil+ entries vs 104k which is what it is supposed to have. use ts() as below
-ts.b2 <- ts(matrix2$bay2)
-
-#z.bay6 <- read.zoo(file = matrix6, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
-#bay6.ts <- as.ts(z.bay6)
-ts.b6 <- ts(matrix6$bay6)
-
-#z.bay11 <- read.zoo(file = matrix11, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
-#bay11.ts <- as.ts(z.bay11)
-ts.b11 <- ts(matrix11$bay11)
-
-##
-# imputeTS()
-##
-# Summary stats on NAs using imputeTS() package
-statsNA(ts.b2)
-statsNA(ts.b6)
-statsNA(ts.b11)
-
-# Plot NAs using imputTS() package
-plotNA.distribution(ts.b2)                             # returns time series plot with pink background for NAs
-plotNA.distributionBar(ts.b2, breaks = 20)             # returns stacked bar graph with % NAs for each breaks bin
-plotNA.gapsize(ts.b2)                                  # returns side-by-sde bar graph for NA gap size
-
-plotNA.distribution(ts.b6)
-plotNA.distributionBar(ts.b6, breaks = 20)
-plotNA.gapsize(ts.b6)
-
-plotNA.distribution(ts.b11)
-plotNA.distributionBar(ts.b11, breaks = 20)
-plotNA.gapsize(ts.b11)
-
-
-#################################
-# 4. INTERPOLATE NAs - imputeTS #
-#################################
-
-# Calculate imputations 
-int.a.bay2 <- na.interpolation(ts.b2)
-int.a.bay6 <- na.interpolation(ts.b6)
-int.a.bay11 <- na.interpolation(ts.b11)
-
-
-# Plot imputations
-plotNA.imputations(ts.b2, int.a.bay2)
-plotNA.imputations(ts.b6, int.a.bay6)
-plotNA.imputations(ts.b11, int.a.bay11)
-
-
-
-########################
-# 5. Export back to df #
-########################
-
-##
-# Interp series - approx
-##
-
-# Make as.df
-bay2.aint.df <- as.data.frame(int.a.bay2)
-bay6.aint.df <- as.data.frame(int.a.bay6)
-bay11.aint.df <- as.data.frame(int.a.bay11)
-
-# Row names from original matrix correspond to time series 
-date <- matrix$value
-USID <- matrix$USID
-
-# Bind
-a.int.df <- cbind(USID, date, bay2.aint.df, bay6.aint.df, bay11.aint.df)
-names(a.int.df) <- c("USID", "date", "B2", "B6", "B11")
-
-
-
-##########################
-# 6. Summarize & compare #
-##########################
-
-##
-# Interp series 1 - approx
-##
-
-# Split dat-time column so that catch can be averaged for each bay, each day 
-a.bay.df <- a.int.df %>% 
-  mutate(day = paste(date)) %>%
-  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
-  group_by(day) %>% 
-  summarize(B2 = mean(B2), B6 = mean(B6), B11 = mean(B11)) %>%
-  gather(bay, IA, "B2", "B6", "B6", 2:4)
-
-
-# Daily average 
-a.day.df <- a.int.df %>% 
-  mutate(day = paste(date)) %>%
-  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
-  gather(bay, IA, "B2", "B6", "B11", 3:5) %>%  
-  group_by(day) %>% 
-  summarize(mean_IA = mean(IA))
-
-
-
-##
-# Raw series
-##
-
-data <- read.csv("TEB_leftjoin.csv")      
-    # Create run time column
-    data <- data %>%
-      select(everything()) %>%
-      mutate_at(vars(c(17)), funs(as.character)) %>%
-      mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
-      mutate_at(vars(c(17)), funs(as.numeric)) %>%
-      mutate(run_time_s = run_time*60)
-
-# Calculate CPUE per run 
-data3.2.2 <- data %>%
-  filter(trap_type =="RST", sockeye_fry_total != "NR") %>%
-  group_by(USID, date, bay) %>%
-  summarize(unq_SO = unique(sockeye_smolt_total), run_time = unique(run_time_s), velocity=unique(current_speed_mps)) %>%
-  mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
-                                 ifelse(run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
-                                 ifelse(run_time=="1080", "2238.905",
-                                 ifelse(run_time=="1140", "2363.288",
-                                 ifelse(run_time=="1200", "2487.672",
-                                 ifelse(run_time=="1260", "2612.056",
-                                 ifelse(run_time=="1320", "2736.439", "1865.71"))))))))) %>%
-  mutate(CPUE = unq_SO/fished_vol) %>%
-  mutate(bay_width = 440/3) %>%                                                                                                                           # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
-  mutate(bay_depth = 1.13) %>%                                                                                                                            # Bay depth for now is considered the RST fishing depth (1.13m)
-  mutate(bay_volume_m3 = bay_width*bay_depth*velocity*run_time) %>%                                                                                   # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
-  mutate(IA = CPUE*bay_volume_m3) 
-
-
-# Average IA per day 
-day.dat <- data3.2.2 %>% 
-  select(-fished_vol, -run_time, -USID, -unq_SO, -run_time, -velocity, -CPUE, -bay_width, -bay_depth, -bay_volume_m3) %>% 
-  group_by(date) %>% 
-  summarize(mean_IA = mean(IA)) %>% 
-  print()
-
-# Average CPUE by bay 
-bay.dat <- data2 %>% 
-  group_by(date, bay) %>% 
-  summarize(mean_IA = mean(IA))
-
-
-##
-# PLOT: Normal temporal  
-##
-
-# Plot by daily average IA 
-day.dat$date <- as.Date(day.dat$date)
-a.day.df$day <- as.Date(a.day.df$day)
-ggplot() + 
-  geom_line(data=day.dat, aes(x=date, y=mean_IA, colour="Raw IA", linetype="Raw IA"), 
-            size=2, alpha=0.7) +
-  geom_line(data=a.day.df, aes(x=day, y=mean_IA, colour="Interpolated IA", linetype="Interpolated IA"), 
-            size=2, alpha=0.7) +
-  #geom_line(data=sp.day.df, aes(x=day, y=mean_CPUE), colour="green", size=2, alpha=0.6) +      # all interp results are the same
-  #geom_line(data=st.day.df, aes(x=day, y=mean_IA), colour="blue", size=2, alpha=0.6) +
-  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
-  scale_colour_manual("", values=c("Raw IA" = "black", 
-                                   "Interpolated IA" = "blue")) + 
-  scale_linetype_manual("", values=c("Raw IA" = 1,
-                                     "Interpolated IA" = 1)) +
-  theme(text = element_text(colour="black", size=45),
-        plot.margin=margin(t=15,r=15,b=0,l=10),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-        legend.text = element_text(size=30),
-        legend.title = element_blank(),
-        legend.background = element_rect(fill="white", colour="black"),
-        legend.position = c(0.80,0.90),
-        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-  ylab("Index of abundance") +   
-  xlab("")
-
-
-# Plot by daily average by BAY IA 
-bay.dat$date <- as.Date(bay.dat$date)
-a.bay.df$day <- as.Date(a.bay.df$day)
-ggplot() + 
-  geom_line(data=bay.dat, aes(x=date, y=mean_IA, group=bay, colour=bay), 
-            linetype="dashed", size=2, alpha=0.6) +
-  geom_line(data=a.bay.df, aes(x=day, y=IA, group=bay, colour=bay), 
-            size=2) +
-  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
-  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
-                      breaks=c("B2", "B6", "B11"), 
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
-  theme(text = element_text(colour="black", size=45),
-        plot.margin=margin(t=15,r=15,b=0,l=0),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-        legend.text = element_text(size=30),
-        legend.title = element_blank(),
-        legend.background = element_rect(fill="white", colour="black"),
-        legend.position = c(0.86,0.85),
-        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-  ylab("Index of abundance") +   
-  xlab("Date")
-
-##
-# PLOT: Cumulative temporal  
-##
-
-# Daily raw IA
-day.cuml.dat <- day.dat %>% 
-  na.omit() %>%
-  mutate(cuml_IA = cumsum(mean_IA)) %>% 
-  mutate(cuml_propn = cuml_IA/sum(mean_IA))
-
-# Daily raw IA by BAY 
-bay.cuml.dat <- bay.dat %>% 
-  group_by(bay) %>% 
-  na.omit() %>%
-  mutate(cuml_IA = cumsum(mean_IA)) %>% 
-  mutate(cuml_propn = cuml_IA/sum(mean_IA))
-
-# Daily interpolated IA 
-a.day.cuml.df <- a.day.df %>% 
-  mutate(cuml_IA = cumsum(mean_IA)) %>% 
-  mutate(cuml_propn = cuml_IA/sum(mean_IA))
-
-# Daily interpolated IA by BAY 
-a.bay.cuml.df <- a.bay.df %>% 
-  group_by(bay) %>%
-  mutate(cuml_IA = cumsum(IA)) %>% 
-  mutate(cuml_propn = cuml_IA/sum(IA))
-
-
-# Plot by daily cumulative CPUE 
-day.cuml.dat$date <- as.Date(day.cuml.dat$date)
-a.day.cuml.df$day <- as.Date(a.day.cuml.df$day)
-
-ggplot() + 
-  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
-  geom_line(data=day.cuml.dat, aes(x=date, y=cuml_propn, colour="Raw IA"), size=2, alpha=0.7) +
-  geom_point(data=day.cuml.dat, aes(x=date, y=cuml_propn, fill="Raw IA"), pch=21, size=4, alpha=0.7) +
-  geom_line(data=a.day.cuml.df, aes(x=day, y=cuml_propn, colour="Interpolated IA"), size=2, alpha=0.7) +
-  geom_point(data=a.day.cuml.df, aes(x=day, y=cuml_propn, fill="Interpolated IA"), pch=21, size=4, alpha=0.7) +
-  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
-  scale_colour_manual("", values=c("Raw IA" = "black", 
-                                   "Interpolated IA" = "blue")) + 
-  scale_fill_manual("", values=c("Raw IA" = "black",
-                                     "Interpolated IA" = "blue")) +
-  theme(text = element_text(colour="black", size=45),
-        plot.margin=margin(t=15,r=15,b=0,l=10),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-        legend.text = element_text(size=30),
-        legend.title = element_blank(),
-        legend.background = element_rect(fill="white", colour="black"),
-        legend.position = c(0.75,0.15),
-        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-  ylab("") +   
-  xlab("")
-
-
-# Plot by daily cumulative CPUE BY BAY!
-bay.cuml.dat$date <- as.Date(bay.cuml.dat$date)
-a.bay.cuml.df$day <- as.Date(a.bay.cuml.df$day)
-
-ggplot() + 
-  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
-  geom_line(data=bay.cuml.dat, aes(x=date, y=cuml_propn, colour=bay), linetype="dashed", size=2, alpha=0.6) +
-  geom_point(data=bay.cuml.dat, aes(x=date, y=cuml_propn, fill=bay), pch=21, size=4, alpha=0.6) +
-  geom_line(data=a.bay.cuml.df, aes(x=day, y=cuml_propn, colour=bay), size=2) +
-  geom_point(data=a.bay.cuml.df, aes(x=day, y=cuml_propn, fill=bay), pch=21, size=4) +
-  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
-  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
-                      breaks=c("B2", "B6", "B11"), 
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) + 
-  scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
-                      breaks=c("B2", "B6", "B11"), 
-                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
-  theme(text = element_text(colour="black", size=45),
-        plot.margin=margin(t=15,r=15,b=0,l=10),
-        panel.background = element_rect(fill = "white", colour = "black", size=2),
-        panel.grid.minor = element_line(colour = "transparent"),
-        panel.grid.major = element_line(colour = "transparent"),
-        plot.background = element_rect(fill = "transparent"),
-        axis.ticks = element_line(size=1.2),
-        axis.ticks.length = unit(0.5, "line"),
-        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
-        axis.text.y = element_text(colour="black", size=25),
-        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
-        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
-        legend.text = element_text(size=30),
-        legend.title = element_blank(),
-        legend.background = element_rect(fill="white", colour="black"),
-        legend.position = c(0.85,0.15),
-        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
-  ylab("") +   
-  xlab("Date")
-
-
 
 
 
 
 #####################################################################################################################################
 
-#                                                 __________________________________________________
-#                                                 |                                                |
-#                                                 |  Infilling mising current values - based on TS |
-#                                                 |________________________________________________|
+# THIS CODE EXPLAINS HOW THE 'current_imp' VALUES IN THE DATAFRAME WERE CALCULATED. 
+# THEY WERE EXPORED AS A CSV: interpolated_current.csv
+        
+        
+#                                ______________________________________________________________________________________
+#                                |                                                                                     |
+#                                |  Infilling mising CURRENT VELOCITY values - based on TS (not informed by discharge) |
+#                                |_____________________________________________________________________________________|
 
                                                               ####################
                                                               # DETECTING BREAKS #
                                                               ####################
+# Resources used: 
+  # Detecting breaks: https://www.r-bloggers.com/endogenously-detecting-structural-breaks-in-a-time-series-implementation-in-r/
+      
 data <- read.csv("TEB_leftjoin.csv")
 
 current <- data %>% 
@@ -1144,7 +708,7 @@ current <- current %>%
 current$time <- paste(current$date, current$set_start, sep=" ")
 current$time <- as.POSIXct(current$time)
 
-# Omit the negative value 
+# Omit the negative value - THIS NEEDS TO BE FIXED BY SHANE OR TOD, it was a transcription error. Was not fixed as of March 29, 2019 
 current[1108,5] <- NA
 
   # Plot
@@ -1153,12 +717,10 @@ current[1108,5] <- NA
     geom_line(aes(colour=bay)) +
     scale_x_datetime(breaks = "10 day", date_labels = "%h %d") 
 
-
 # Remove NAs - Must do this first for known values to detect breakpoints, or else NAs cause error
 current2 <- current %>% 
   filter(current > 0) %>%
   print()
-
 
 ####
 # TS by bay
@@ -1184,7 +746,7 @@ b6.current.ts <- ts(bay6$current)
 b11.current.ts <- ts(bay11$current)
 
 ####
-# Detect breaks
+# Detect breaks and confidence intervals 
 ####
 
 # Detect breaks 
@@ -1203,7 +765,6 @@ b11.bp <- breakpoints(b11.current.ts ~ 1)
 b11.ci <- confint(b11.bp)
 summary(b11.bp) 
       # Bay 11 breakpoints are at entries: 209, 317
-
 
 #####
 # Plot
@@ -1319,7 +880,7 @@ grid.draw(rbind(ggplotGrob(b2), ggplotGrob(b6), ggplotGrob(b11),size="last"))
 
 
 ####
-# as.data.frame
+# Make as.data.frame
 ####
 
 # Create dataframes from time series so that can x-ref breakpoints with actual dates/times 
@@ -1344,19 +905,19 @@ bay11.df <- cbind(bay11.df, bay11.date)
       # Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
 
 
-#----------------------------------------------------------------------------------------------------------------------
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-                                      ###################################################
-                                      # INFILL: Mean/median based on breaks + time slot #
-                                      ###################################################
+                                      #####################################################
+                                      # INFILL: Mean/median based on breaks + time blocks #
+                                      #####################################################
 
+# Note: this method is called 'median time block' in the paper 
 
-######################################
-# BAY 2 SUBSETS BASED ON BREAKPOINTS #
-######################################
-
- # Entry 203 corresponds to: 2017-05-05 09:58:00
- # Entry 359 corresponds to: 2017-05-28 09:14:00     # bigger conf int
+########################################
+# Bay 2 subsetted df's based on breaks #
+########################################
+# Entry 203 corresponds to: 2017-05-05 09:58:00
+# Entry 359 corresponds to: 2017-05-28 09:14:00     # bigger conf int
 
 ###
 # Break 1
@@ -1404,7 +965,7 @@ summary(lm(bay2.br1$current_der ~ bay2.br1$jdat))
 AICc(lm(bay2.br1$current_der ~ bay2.br1$jdat))
 
 ###
-# Break 2 - No missing values  
+# Break 2 - No missing values but create dataframe for joining/stacking frames later 
 ###
 bay2.br2 <- current %>%
   filter(bay=="B2") %>% 
@@ -1444,10 +1005,9 @@ summary(lm2.3.mb)
 AICc(lm2.3.mb)
 
 
-######################################
-# BAY 6 SUBSETS BASED ON BREAKPOINTS #
-######################################
-
+########################################
+# Bay 6 subsetted df's based on breaks #
+########################################
 # Entry 143 corresponds to: 2017-04-26 06:13:00
 # Entry 210 corresponds to: 2017-05-05 09:08:00
 # Entry 278 corresponds to: 2017-05-16 10:50:00     # bigger conf int
@@ -1536,12 +1096,9 @@ bay6.br5$time_round <- format(as.POSIXct(bay6.br5$time_round), format = "%H:%M:%
 bay6.br5$jdat <- julian(bay6.br5$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 
-
-
-#######################################
-# BAY 11 SUBSETS BASED ON BREAKPOINTS #
-#######################################
-
+########################################
+# Bay 6 subsetted df's based on breaks #
+########################################
 # Entry 209 corresponds to: 2017-05-05 08:22:00
 # Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
 
@@ -1588,9 +1145,9 @@ lm11.1.mb <- lm(bay11.br1$current_der~bay11.br1$jdat)
 summary(lm11.1.mb)
 AICc(lm11.1.mb)
 
-#####
+###
 # Break 2 - No missing values 
-#####
+###
 bay11.br2 <- current %>%
   filter(bay=="B11") %>% 
   filter(time >= as.POSIXct("2017-05-05 08:22:00") & time <= as.POSIXct("2017-05-22 09:55:00")) %>%
@@ -1599,9 +1156,9 @@ bay11.br2 <- current %>%
 bay11.br2$time_round <- format(as.POSIXct(bay11.br2$time_round), format = "%H:%M:%S") 
 bay11.br2$jdat <- julian(bay11.br2$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
-#####
+###
 # Break 3
-#####
+###
 bay11.br3 <- current %>%
   filter(bay=="B11") %>% 
   filter(time >= as.POSIXct("2017-05-22 09:55:00") & time <= as.POSIXct("2017-06-14 12:02:00")) %>%
@@ -1635,7 +1192,7 @@ summary(lm11.3.mb)
 AICc(lm11.3.mb)
 
 ####################
-# STACK DATAFRAMES #
+# Stack dataframes #
 ####################
 names <- list(names(bay2.br1))
 
@@ -1648,18 +1205,22 @@ new.df <- Reduce(function(...) merge(..., all=TRUE), list(b2.new.df, b6.new.df, 
 
 
 
-#----------------------------------------------------------------------------------------------------------------------
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
                                             #########################################
                                             # INFILL: mice(methods) based on breaks #
                                             #########################################
+# Resources: 
+  # mice() intro: https://www.r-bloggers.com/handling-missing-data-with-mice-package-a-simple-approach/
+  # mice() intro: https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
+  # mice() and other methods: https://stats.idre.ucla.edu/r/faq/how-do-i-perform-multiple-imputation-using-predictive-mean-matching-in-r/
 
-######################################
-# BAY 2 SUBSETS BASED ON BREAKPOINTS #
-######################################
-
- # Entry 203 corresponds to: 2017-05-05 09:58:00
- # Entry 359 corresponds to: 2017-05-28 09:14:00     # bigger conf int
+########################################
+# Bay 2 subsetted df's based on breaks #
+########################################
+# Breakpoints: 
+  # Entry 203 corresponds to: 2017-05-05 09:58:00
+  # Entry 359 corresponds to: 2017-05-28 09:14:00     # bigger conf int
 
 ####
 # Break 1: 2017-04-03 09:29:00 - 2017-05-05 09:58:00
@@ -1701,7 +1262,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         summary(lm(comp.pmm$current ~ comp.pmm$jdat))
         AICc(lm(comp.pmm$current ~ comp.pmm$jdat))              
 
-    
     #Impute: norm.predict
     imp.pnorm = mice(bay2.br1, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
     xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
@@ -1714,7 +1274,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         bay2br1.comp.pnorm <- complete(imp.pnorm)
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
         AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              
-
 
     # Impute: Bayesian linear regression
     imp.bays = mice(bay2.br1, method="norm", predictorMatrix=predM, m=5, seed=500)
@@ -1729,7 +1288,8 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
         AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
 
-
+# No point making dataframe for breaks without missing values - already have those from above
+        
 ###
 # Break 3: 2017-05-28 09:14:00 - 2017-06-14 12:25:00
 ###
@@ -1774,7 +1334,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         summary(lm(comp.pmm$current ~ comp.pmm$jdat))
         AICc(lm(comp.pmm$current ~ comp.pmm$jdat))            
 
-    
     #Impute: norm.predict
     imp.pnorm = mice(bay2.br3, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
     xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
@@ -1787,7 +1346,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         bay2br3.comp.pnorm <- complete(imp.pnorm)
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
         AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))            
-
 
     # Impute: Bayesian linear regression
     imp.bays = mice(bay2.br3, method="norm", predictorMatrix=predM, m=5, seed=500)
@@ -1805,12 +1363,9 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
 
         
         
-        
-        
-######################################
-# BAY 6 SUBSETS BASED ON BREAKPOINTS #
-######################################
-
+########################################
+# Bay 6 subsetted df's based on breaks #
+########################################
 # Breakpoints: 
   # Entry 143 corresponds to: 2017-04-26 06:13:00
   # Entry 210 corresponds to: 2017-05-05 09:08:00     NO MISSING VALS
@@ -1820,7 +1375,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
 ####
 # Break 1: 2017-04-03 09:29:00 - 2017-04-26 06:13:00
 ####
-
 bay6.br1 <- current %>%
   filter(bay=="B6") %>% 
   filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-04-26 06:13:00")) %>%
@@ -1836,13 +1390,7 @@ r1<-resid(lm2.1)
 plot(r1)
 hist(r1)
 
-<<<<<<< HEAD
-# I need completed datasets for 
-  # Bay 2 Break 1 (pnorm) and Break 3 (pnorm)
-  # Bay 6 Break 1 (pnorm)
-  # Bay 11 Break 1 (pnorm) and Break 3 (median time block)
-=======
-# subset data to remove variables not needed for prediction 
+# Subset data to remove variables not needed for infilling 
 bay6.br1 <- bay6.br1 %>% 
   select(-c(USID,date,set_start,bay,time, time_round))
 
@@ -1851,7 +1399,6 @@ init <- mice(bay6.br1, maxit=0)
 predM <- init$predictorMatrix     # Set predictor matrix
 predM[c("current")]=0             # signify variables not to be considered as predictors but will be imputed
 meth[c("ftime")]=""               # signify variables that don't need to be imputed but will be used as predictors 
->>>>>>> 262cfcbe110fa7a4cd57d3b7218550dfbc17c4e6
 
     # Impute: pmm
     imp.pmm = mice(bay6.br1, method="pmm", predictorMatrix=predM, m=5, seed=500)
@@ -1864,9 +1411,8 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         # Model results with completed dataset 
         comp.pmm <- complete(imp.pmm)
         summary(lm(comp.pmm$current ~ comp.pmm$jdat))
-        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))              # AICc = -229.48
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))             
 
-    
     #Impute: norm.predict
     imp.pnorm = mice(bay6.br1, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
     xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
@@ -1878,9 +1424,8 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         # Model results with completed dataset 
         bay6br1.comp.pnorm <- complete(imp.pnorm)
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
-        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              # AICc = -220.02
-
-
+        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              
+        
     # Impute: Bayesian linear regression
     imp.bays = mice(bay6.br1, method="norm", predictorMatrix=predM, m=5, seed=500)
     xyplot(imp.bays, current ~ jdat, scales="free")
@@ -1892,27 +1437,22 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         # Model results with completed dataset
         comp.pbayes <- complete(imp.bays)
         summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
-        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              # AICc = -213.28
+        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
 
         
 
-
-
-
-
         
-#######################################
-# BAY 11 SUBSETS BASED ON BREAKPOINTS #
-#######################################
-
+        
+#########################################
+# Bay 11 subsetted df's based on breaks #
+#########################################
 # Breakpoints: 
-# Entry 209 corresponds to: 2017-05-05 08:22:00
-# Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
+  # Entry 209 corresponds to: 2017-05-05 08:22:00
+  # Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
 
 ####
 # Break 1: 2017-04-03 09:29:00 - 2017-05-05 08:22:00
 ####
-
 bay11.br1 <- current %>%
   filter(bay=="B11") %>% 
   filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 08:22:00")) %>%
@@ -1950,7 +1490,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         comp.pmm <- complete(imp.pmm)
         summary(lm(comp.pmm$current ~ comp.pmm$jdat))
         AICc(lm(comp.pmm$current ~ comp.pmm$jdat))             
-
     
     #Impute: norm.predict
     imp.pnorm = mice(bay11.br1, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
@@ -1965,7 +1504,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
         AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))           
 
-
     # Impute: Bayesian linear regression
     imp.bays = mice(bay11.br1, method="norm", predictorMatrix=predM, m=5, seed=500)
     xyplot(imp.bays, current ~ jdat, scales="free")
@@ -1978,7 +1516,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         comp.pbayes <- complete(imp.bays)
         summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
         AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
-
 
 
 ####
@@ -2022,7 +1559,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         summary(lm(comp.pmm$current ~ comp.pmm$jdat))
         AICc(lm(comp.pmm$current ~ comp.pmm$jdat))             
         
-    
     #Impute: norm.predict
     imp.pnorm = mice(bay11.br3, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
     xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
@@ -2035,7 +1571,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         comp.pnorm <- complete(imp.pnorm)
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
         AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))             
-
 
     # Impute: Bayesian linear regression
     imp.bays = mice(bay11.br3, method="norm", predictorMatrix=predM, m=5, seed=500)
@@ -2053,7 +1588,9 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
 
         
         
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ REMAKE DATAFRAME         
+####################
+# Remake dataframe #
+####################
 # I want dataframes for: 
   # Bay 2 Break 1:   bay2br1.comp.pnorm
   # Bay 2 Break 3:   bay2br3.comp.pnorm
@@ -2073,7 +1610,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
 ###
 # FIRST re-bind imputed df with original dfs 
 ###
-        
 # Bay 2 Break 1:   bay2br1.comp.pnorm
 colnames(bay2br1.comp.pnorm)[colnames(bay2br1.comp.pnorm)=="current"] <- "current_imp"
 bay2.1.imp <- cbind(bay2.br1, bay2br1.comp.pnorm)  
@@ -2101,7 +1637,6 @@ bay11.3.imp <- bay11.3.imp %>%
   select(USID, date, set_start, bay, current, time, time_round, current_imp, jdat)
 
 
-
 ###
 # SECOND rename/create current columns so they can stack 
 ###
@@ -2126,9 +1661,8 @@ bay6.br5 <- bay6.br5 %>%
 colnames(bay11.br2)[colnames(bay11.br2)=="current_der"] <- "current_imp"
 
 ###
-# THIRD stack em!
+# THIRD stack frames
 ###
-
 names <- list(names(bay2br1.comp.pnorm))
 
 b2.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay2.1.imp, bay2.br2, bay2.3.imp))    
@@ -2136,7 +1670,6 @@ b6.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay6.1.imp, bay6.br
 b11.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay11.1.imp, bay11.br2, bay11.3.imp))
 
 new.df <- Reduce(function(...) merge(..., all=TRUE), list(b2.new.df, b6.new.df, b11.new.df))
-
 
 write.csv(new.df, "interpolated_current.csv", row.names=F)
 
