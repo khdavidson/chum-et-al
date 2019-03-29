@@ -679,7 +679,413 @@ daily_RSTVT_m5 <- RSTVT_m5_fac %>%
 
 
 
+  #----------------------------------------------------------------------------------------------------------------------------------
 
+
+# This method was moved here as it is the same as Method 3, it just uses the expanded abundance estimate. I don't think this is the
+    # right route to go, as most papers do analysis starting with CPUE and then expand outward. 
+  
+                                                #______________________________________________________#
+                                                #        METHOD A6: Infilling with IA (M2)            #
+                                                #  (ignoring missing values due to missing velocity)   #
+                                                #______________________________________________________#
+
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++ RAw DATA
+
+#######################
+# 1. Create dataframe #
+#######################
+
+data <- read.csv("TEB_leftjoin.csv")      
+
+    # Create run time column
+    data <- data %>%
+      select(everything()) %>%
+      mutate_at(vars(c(17)), funs(as.character)) %>%
+      mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
+      mutate_at(vars(c(17)), funs(as.numeric)) %>%
+      mutate(run_time_s = run_time*60)
+
+# Calculate CPUE per run 
+data3.2.2 <- data %>%
+  filter(trap_type =="RST", sockeye_fry_total != "NR") %>%
+  group_by(USID, date) %>%
+  summarize(unq_SO = unique(sockeye_smolt_total), run_time = unique(run_time_s), velocity=unique(current_speed_mps)) %>%
+  mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                 ifelse(run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
+                                 ifelse(run_time=="1080", "2238.905",
+                                 ifelse(run_time=="1140", "2363.288",
+                                 ifelse(run_time=="1200", "2487.672",
+                                 ifelse(run_time=="1260", "2612.056",
+                                 ifelse(run_time=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(CPUE = unq_SO/fished_vol) %>%
+  mutate(bay_width = 440/3) %>%                                                                                                                           # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
+  mutate(bay_depth = 1.13) %>%                                                                                                                            # Bay depth for now is considered the RST fishing depth (1.13m)
+  mutate(bay_volume_m3 = bay_width*bay_depth*velocity*run_time) %>%                                                                                   # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
+  mutate(IA = CPUE*bay_volume_m3) 
+
+data3.2.2<-data3.2.2 %>% 
+  ungroup() %>%
+  select(-unq_SO, -fished_vol, -run_time, -USID, -velocity, -CPUE, -bay_width, -bay_depth, -bay_volume_m3) 
+
+# Average IA per day 
+data3.2.3 <- data3.2.2 %>% 
+  group_by(date) %>% 
+  summarize(mean_IA = mean(IA)) %>% 
+  print()
+
+
+#################################################################################
+#  I am going to skip sections on autocorrelation and model testing.            #
+#   Have already established the time series is autocorrelated, re-visiting     #
+#   with IA data would not change it. Also, the NAs introduced in the IA        #
+#   calculation due to missing velocity measurements require subsetting         #
+#   the data further, and I don't really feel like taking the time to do that!  #
+#################################################################################
+
+
+
+#########################################
+# 2. ASSESS MISSING DATA IN CATCH TABLE #
+#########################################
+
+# Load catch table matrix
+matrix <- read.csv("mission_SO_IA_matrix.csv")
+
+    # Bay 2 matrix
+    matrix2 <- matrix %>% 
+      select(value, bay2) %>% 
+      rename(date=value)
+    # Bay 6 matrix
+    matrix6 <- matrix %>% 
+      select(value, bay6) %>% 
+      rename(date=value)
+    # Bay 11 matrix
+    matrix11 <- matrix %>% 
+      select(value, bay11) %>% 
+      rename(date=value)
+
+# Create a time series for each Bay
+#z.bay2 <- read.zoo(file = matrix2, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
+#bay2.ts <- as.ts(z.bay2)                 # For some reason, while zoo() preserves the matrix fine, this call makes the ts wildy innacurrate - 6mil+ entries vs 104k which is what it is supposed to have. use ts() as below
+ts.b2 <- ts(matrix2$bay2)
+
+#z.bay6 <- read.zoo(file = matrix6, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
+#bay6.ts <- as.ts(z.bay6)
+ts.b6 <- ts(matrix6$bay6)
+
+#z.bay11 <- read.zoo(file = matrix11, header = TRUE, format = "%Y-%m-%d %H:%M:%S", tz="GMT")
+#bay11.ts <- as.ts(z.bay11)
+ts.b11 <- ts(matrix11$bay11)
+
+##
+# imputeTS()
+##
+# Summary stats on NAs using imputeTS() package
+statsNA(ts.b2)
+statsNA(ts.b6)
+statsNA(ts.b11)
+
+# Plot NAs using imputTS() package
+plotNA.distribution(ts.b2)                             # returns time series plot with pink background for NAs
+plotNA.distributionBar(ts.b2, breaks = 20)             # returns stacked bar graph with % NAs for each breaks bin
+plotNA.gapsize(ts.b2)                                  # returns side-by-sde bar graph for NA gap size
+
+plotNA.distribution(ts.b6)
+plotNA.distributionBar(ts.b6, breaks = 20)
+plotNA.gapsize(ts.b6)
+
+plotNA.distribution(ts.b11)
+plotNA.distributionBar(ts.b11, breaks = 20)
+plotNA.gapsize(ts.b11)
+
+
+#################################
+# 4. INTERPOLATE NAs - imputeTS #
+#################################
+
+# Calculate imputations 
+int.a.bay2 <- na.interpolation(ts.b2)
+int.a.bay6 <- na.interpolation(ts.b6)
+int.a.bay11 <- na.interpolation(ts.b11)
+
+
+# Plot imputations
+plotNA.imputations(ts.b2, int.a.bay2)
+plotNA.imputations(ts.b6, int.a.bay6)
+plotNA.imputations(ts.b11, int.a.bay11)
+
+
+
+########################
+# 5. Export back to df #
+########################
+
+##
+# Interp series - approx
+##
+
+# Make as.df
+bay2.aint.df <- as.data.frame(int.a.bay2)
+bay6.aint.df <- as.data.frame(int.a.bay6)
+bay11.aint.df <- as.data.frame(int.a.bay11)
+
+# Row names from original matrix correspond to time series 
+date <- matrix$value
+USID <- matrix$USID
+
+# Bind
+a.int.df <- cbind(USID, date, bay2.aint.df, bay6.aint.df, bay11.aint.df)
+names(a.int.df) <- c("USID", "date", "B2", "B6", "B11")
+
+
+
+##########################
+# 6. Summarize & compare #
+##########################
+
+##
+# Interp series 1 - approx
+##
+
+# Split dat-time column so that catch can be averaged for each bay, each day 
+a.bay.df <- a.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  group_by(day) %>% 
+  summarize(B2 = mean(B2), B6 = mean(B6), B11 = mean(B11)) %>%
+  gather(bay, IA, "B2", "B6", "B6", 2:4)
+
+
+# Daily average 
+a.day.df <- a.int.df %>% 
+  mutate(day = paste(date)) %>%
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
+  gather(bay, IA, "B2", "B6", "B11", 3:5) %>%  
+  group_by(day) %>% 
+  summarize(mean_IA = mean(IA))
+
+
+
+##
+# Raw series
+##
+
+data <- read.csv("TEB_leftjoin.csv")      
+    # Create run time column
+    data <- data %>%
+      select(everything()) %>%
+      mutate_at(vars(c(17)), funs(as.character)) %>%
+      mutate(run_time = paste(gsub("0:", "", run_time))) %>% 
+      mutate_at(vars(c(17)), funs(as.numeric)) %>%
+      mutate(run_time_s = run_time*60)
+
+# Calculate CPUE per run 
+data3.2.2 <- data %>%
+  filter(trap_type =="RST", sockeye_fry_total != "NR") %>%
+  group_by(USID, date, bay) %>%
+  summarize(unq_SO = unique(sockeye_smolt_total), run_time = unique(run_time_s), velocity=unique(current_speed_mps)) %>%
+  mutate(fished_vol = as.numeric(ifelse(run_time=="600", "1243.836",                                                                                  # Nested ifelse() command to apply volume of water fished for each run length that isn't 900 s
+                                 ifelse(run_time=="1020", "2114.521",                                                                          # Syntax is "run seconds", "fished volume"
+                                 ifelse(run_time=="1080", "2238.905",
+                                 ifelse(run_time=="1140", "2363.288",
+                                 ifelse(run_time=="1200", "2487.672",
+                                 ifelse(run_time=="1260", "2612.056",
+                                 ifelse(run_time=="1320", "2736.439", "1865.71"))))))))) %>%
+  mutate(CPUE = unq_SO/fished_vol) %>%
+  mutate(bay_width = 440/3) %>%                                                                                                                           # New column for Bay width (total river width = 440m/3 = Bay width)                                                                                                                                               
+  mutate(bay_depth = 1.13) %>%                                                                                                                            # Bay depth for now is considered the RST fishing depth (1.13m)
+  mutate(bay_volume_m3 = bay_width*bay_depth*velocity*run_time) %>%                                                                                   # Step 2: Volume of water in Bay during the whole run (Bay area*current velocity*run length)
+  mutate(IA = CPUE*bay_volume_m3) 
+
+
+# Average IA per day 
+day.dat <- data3.2.2 %>% 
+  select(-fished_vol, -run_time, -USID, -unq_SO, -run_time, -velocity, -CPUE, -bay_width, -bay_depth, -bay_volume_m3) %>% 
+  group_by(date) %>% 
+  summarize(mean_IA = mean(IA)) %>% 
+  print()
+
+# Average CPUE by bay 
+bay.dat <- data2 %>% 
+  group_by(date, bay) %>% 
+  summarize(mean_IA = mean(IA))
+
+
+##
+# PLOT: Normal temporal  
+##
+
+# Plot by daily average IA 
+day.dat$date <- as.Date(day.dat$date)
+a.day.df$day <- as.Date(a.day.df$day)
+ggplot() + 
+  geom_line(data=day.dat, aes(x=date, y=mean_IA, colour="Raw IA", linetype="Raw IA"), 
+            size=2, alpha=0.7) +
+  geom_line(data=a.day.df, aes(x=day, y=mean_IA, colour="Interpolated IA", linetype="Interpolated IA"), 
+            size=2, alpha=0.7) +
+  #geom_line(data=sp.day.df, aes(x=day, y=mean_CPUE), colour="green", size=2, alpha=0.6) +      # all interp results are the same
+  #geom_line(data=st.day.df, aes(x=day, y=mean_IA), colour="blue", size=2, alpha=0.6) +
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+  scale_colour_manual("", values=c("Raw IA" = "black", 
+                                   "Interpolated IA" = "blue")) + 
+  scale_linetype_manual("", values=c("Raw IA" = 1,
+                                     "Interpolated IA" = 1)) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.80,0.90),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("Index of abundance") +   
+  xlab("")
+
+
+# Plot by daily average by BAY IA 
+bay.dat$date <- as.Date(bay.dat$date)
+a.bay.df$day <- as.Date(a.bay.df$day)
+ggplot() + 
+  geom_line(data=bay.dat, aes(x=date, y=mean_IA, group=bay, colour=bay), 
+            linetype="dashed", size=2, alpha=0.6) +
+  geom_line(data=a.bay.df, aes(x=day, y=IA, group=bay, colour=bay), 
+            size=2) +
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=0),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.86,0.85),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("Index of abundance") +   
+  xlab("Date")
+
+##
+# PLOT: Cumulative temporal  
+##
+
+# Daily raw IA
+day.cuml.dat <- day.dat %>% 
+  na.omit() %>%
+  mutate(cuml_IA = cumsum(mean_IA)) %>% 
+  mutate(cuml_propn = cuml_IA/sum(mean_IA))
+
+# Daily raw IA by BAY 
+bay.cuml.dat <- bay.dat %>% 
+  group_by(bay) %>% 
+  na.omit() %>%
+  mutate(cuml_IA = cumsum(mean_IA)) %>% 
+  mutate(cuml_propn = cuml_IA/sum(mean_IA))
+
+# Daily interpolated IA 
+a.day.cuml.df <- a.day.df %>% 
+  mutate(cuml_IA = cumsum(mean_IA)) %>% 
+  mutate(cuml_propn = cuml_IA/sum(mean_IA))
+
+# Daily interpolated IA by BAY 
+a.bay.cuml.df <- a.bay.df %>% 
+  group_by(bay) %>%
+  mutate(cuml_IA = cumsum(IA)) %>% 
+  mutate(cuml_propn = cuml_IA/sum(IA))
+
+
+# Plot by daily cumulative CPUE 
+day.cuml.dat$date <- as.Date(day.cuml.dat$date)
+a.day.cuml.df$day <- as.Date(a.day.cuml.df$day)
+
+ggplot() + 
+  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
+  geom_line(data=day.cuml.dat, aes(x=date, y=cuml_propn, colour="Raw IA"), size=2, alpha=0.7) +
+  geom_point(data=day.cuml.dat, aes(x=date, y=cuml_propn, fill="Raw IA"), pch=21, size=4, alpha=0.7) +
+  geom_line(data=a.day.cuml.df, aes(x=day, y=cuml_propn, colour="Interpolated IA"), size=2, alpha=0.7) +
+  geom_point(data=a.day.cuml.df, aes(x=day, y=cuml_propn, fill="Interpolated IA"), pch=21, size=4, alpha=0.7) +
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+  scale_colour_manual("", values=c("Raw IA" = "black", 
+                                   "Interpolated IA" = "blue")) + 
+  scale_fill_manual("", values=c("Raw IA" = "black",
+                                     "Interpolated IA" = "blue")) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.75,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("") +   
+  xlab("")
+
+
+# Plot by daily cumulative CPUE BY BAY!
+bay.cuml.dat$date <- as.Date(bay.cuml.dat$date)
+a.bay.cuml.df$day <- as.Date(a.bay.cuml.df$day)
+
+ggplot() + 
+  geom_hline(aes(yintercept=0.5), colour="gray30", linetype="dotted", size=1.1) +
+  geom_line(data=bay.cuml.dat, aes(x=date, y=cuml_propn, colour=bay), linetype="dashed", size=2, alpha=0.6) +
+  geom_point(data=bay.cuml.dat, aes(x=date, y=cuml_propn, fill=bay), pch=21, size=4, alpha=0.6) +
+  geom_line(data=a.bay.cuml.df, aes(x=day, y=cuml_propn, colour=bay), size=2) +
+  geom_point(data=a.bay.cuml.df, aes(x=day, y=cuml_propn, fill=bay), pch=21, size=4) +
+  scale_x_date(date_breaks = "5 day", date_labels = ("%h %d")) +
+  scale_colour_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) + 
+  scale_fill_manual(values=c("#0059d1", "#f0992d", "#81a926"),  
+                      breaks=c("B2", "B6", "B11"), 
+                      labels=c("Bay 2", "Bay 6", "Bay 11")) +
+  theme(text = element_text(colour="black", size=45),
+        plot.margin=margin(t=15,r=15,b=0,l=10),
+        panel.background = element_rect(fill = "white", colour = "black", size=2),
+        panel.grid.minor = element_line(colour = "transparent"),
+        panel.grid.major = element_line(colour = "transparent"),
+        plot.background = element_rect(fill = "transparent"),
+        axis.ticks = element_line(size=1.2),
+        axis.ticks.length = unit(0.5, "line"),
+        axis.title.y.left = element_text(margin=margin(t=0,r=15,b=0,l=0), face="bold", size=30),
+        axis.text.y = element_text(colour="black", size=25),
+        axis.title.x = element_text(margin=margin(t=10,r=0,b=0,l=0), face="bold", size=30),
+        axis.text.x = element_text(colour="black", angle=45, hjust=1, size=25),
+        legend.text = element_text(size=30),
+        legend.title = element_blank(),
+        legend.background = element_rect(fill="white", colour="black"),
+        legend.position = c(0.85,0.15),
+        legend.key.width = unit(2.5, "line")) +                                                               # Position order is: horizontal adjustment, vertical adjustment   
+  ylab("") +   
+  xlab("Date")
 
 
 
