@@ -1673,7 +1673,7 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         # Model results with completed dataset 
         comp.pmm <- complete(imp.pmm)
         summary(lm(comp.pmm$current ~ comp.pmm$jdat))
-        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))              # AICc = -433.0133
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))              
 
     
     #Impute: norm.predict
@@ -1687,7 +1687,7 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         # Model results with completed dataset 
         comp.pnorm <- complete(imp.pnorm)
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
-        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              # AICc = -434.4665
+        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              
 
 
     # Impute: Bayesian linear regression
@@ -1701,7 +1701,7 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         # Model results with completed dataset
         comp.pbayes <- complete(imp.bays)
         summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
-        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              # AICc = -420.8414
+        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
 
 
 
@@ -1793,7 +1793,10 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
 
 
 
-
+# I need completed datasets for 
+  # Bay 2 Break 1 (pnorm) and Break 3 (pnorm)
+  # Bay 6 Break 1 (pnorm)
+  # Bay 11 Break 1 (pnorm) and Break 3 (median time block)
 
 
 
