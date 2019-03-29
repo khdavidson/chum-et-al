@@ -26,6 +26,7 @@ library(AER)       # dispersiontest
 library(tidyr)
 library(lubridate)  # lubridate::
 
+
 # Read data
 data <- read.csv("TEB_leftjoin.csv")
 
@@ -123,6 +124,7 @@ exp$date_start <- as.POSIXct(exp$date_start)
 exp$bay <- as.factor(exp$bay)
 
 db.exp <- left_join(exp, db, by=c("USID", "bay", "CPUE"))
+write.csv(db.exp, "catchtable_CPUE_longform.csv", row.names=F)
 
 db.comp <- db.exp %>% 
   na.omit()
@@ -135,7 +137,7 @@ db.comp <- db.exp %>%
 
 
 # Create global model to assess diagnostic plots 
-m.global <- glm(CPUE ~ current_imp + date + bay + start, data=db, family=gaussian(link="identity"))
+m.global <- glm(CPUE ~ current_imp + date + bay + time_round, data=db, family=gaussian(link="identity"))
 summary(m.global)
 plot(m.global)
 
@@ -145,7 +147,7 @@ impute <- function (a, a.impute){
   ifelse (is.na(a), a.impute, a)
 }
 
-CPUE.imp.1 <- impute(db.exp$CPUE, pred.1)
+CPUE.imp.1 <- impute(db.exp, pred.1)
 
 
 
