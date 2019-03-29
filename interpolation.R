@@ -23,6 +23,7 @@ library(grid)
 library(gridExtra)
 library(chron)
 library(mice)
+library(AICcmodavg)
 
 # Read data
 data <- read.csv("TEB_leftjoin.csv")
@@ -1360,7 +1361,6 @@ bay11.df <- cbind(bay11.df, bay11.date)
 ###
 # Break 1
 ###
-
 bay2.br1 <- current %>%
   filter(bay=="B2") %>% 
   filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 09:58:00")) %>%
@@ -1412,6 +1412,7 @@ bay2.br2 <- current %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
   mutate(current_der = current)
 bay2.br2$time_round <- format(as.POSIXct(bay2.br2$time_round), format = "%H:%M:%S") 
+bay2.br2$jdat <- julian(bay2.br2$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 ###
 # Break 3
@@ -1421,7 +1422,10 @@ bay2.br3 <- current %>%
   filter(time >= as.POSIXct("2017-05-28 09:14:00") & time <= as.POSIXct("2017-06-14 12:25:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay2.br3$time_round <- format(as.POSIXct(bay2.br3$time_round), format = "%H:%M:%S") 
+bay2.br3$jdat <- julian(bay2.br3$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
+
 bay2.br3[1,5] <- NA
+
 
 # Calculate mean/median current based on rough time slots to nearest half hour
 rtime2.3 <- bay2.br3 %>% 
@@ -1435,7 +1439,9 @@ bay2.br3 <- bay2.br3 %>%
   mutate(current_der = ifelse(is.na(current) & time_round=="09:00:00", "0.818", 
                        ifelse(is.na(current) & time_round=="10:30:00", "0.843", current)))
 
-
+lm2.3.mb <- lm(bay2.br3$current_der ~ bay2.br3$jdat)
+summary(lm2.3.mb)
+AICc(lm2.3.mb)
 
 
 ######################################
@@ -1455,6 +1461,8 @@ bay6.br1 <- current %>%
   filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-04-26 06:13:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay6.br1$time_round <- format(as.POSIXct(bay6.br1$time_round), format = "%H:%M:%S") 
+bay6.br1$jdat <- julian(bay6.br1$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
+
 
 # Calculate mean/median current based on rough time slots to nearest half hour
 rtime6.1 <- bay6.br1 %>% 
@@ -1483,6 +1491,10 @@ bay6.br1 <- bay6.br1 %>%
                        ifelse(is.na(current) & time_round=="12:30:00", "0.794",
                        ifelse(is.na(current) & time_round=="13:30:00", "0.828", current)))))))))))
 
+lm.6.1.mb <- lm(bay6.br1$current_der~bay6.br1$jdat)
+summary(lm.6.1.mb)
+AICc(lm.6.1.mb)
+
 ###
 # Break 2 - No missing values 
 ###
@@ -1491,6 +1503,7 @@ bay6.br2 <- current %>%
   filter(time >= as.POSIXct("2017-04-26 06:13:00") & time <= as.POSIXct("2017-05-05 09:08:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay6.br2$time_round <- format(as.POSIXct(bay6.br2$time_round), format = "%H:%M:%S") 
+bay6.br2$jdat <- julian(bay6.br2$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 ###
 # Break 3 - No missing values 
@@ -1500,6 +1513,7 @@ bay6.br3 <- current %>%
   filter(time >= as.POSIXct("2017-05-05 09:08:00") & time <= as.POSIXct("2017-05-16 10:50:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay6.br3$time_round <- format(as.POSIXct(bay6.br3$time_round), format = "%H:%M:%S")
+bay6.br3$jdat <- julian(bay6.br3$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 ###
 # Break 4 - No missing values
@@ -1509,6 +1523,7 @@ bay6.br4 <- current %>%
   filter(time >= as.POSIXct("2017-05-16 10:50:00") & time <= as.POSIXct("2017-05-26 13:23:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay6.br4$time_round <- format(as.POSIXct(bay6.br4$time_round), format = "%H:%M:%S")
+bay6.br4$jdat <- julian(bay6.br4$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 ###
 # Break 5 - No missing values
@@ -1518,7 +1533,7 @@ bay6.br5 <- current %>%
   filter(time >= as.POSIXct("2017-05-26 13:23:00") & time <= as.POSIXct("2017-06-14 11:40:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay6.br5$time_round <- format(as.POSIXct(bay6.br5$time_round), format = "%H:%M:%S")
-
+bay6.br5$jdat <- julian(bay6.br5$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 
 
@@ -1538,6 +1553,7 @@ bay11.br1 <- current %>%
   filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 08:22:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay11.br1$time_round <- format(as.POSIXct(bay11.br1$time_round), format = "%H:%M:%S") 
+bay11.br1$jdat <- julian(bay11.br1$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 # Calculate mean/median current based on rough time slots to nearest half hour
 rtime11.1 <- bay11.br1 %>% 
@@ -1568,6 +1584,10 @@ bay11.br1 <- bay11.br1 %>%
                        ifelse(is.na(current) & time_round=="12:30:00", "0.536",
                        ifelse(is.na(current) & time_round=="13:00:00", "0.492", current)))))))))))))
 
+lm11.1.mb <- lm(bay11.br1$current_der~bay11.br1$jdat)
+summary(lm11.1.mb)
+AICc(lm11.1.mb)
+
 #####
 # Break 2 - No missing values 
 #####
@@ -1577,6 +1597,7 @@ bay11.br2 <- current %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
   mutate(current_der = current)
 bay11.br2$time_round <- format(as.POSIXct(bay11.br2$time_round), format = "%H:%M:%S") 
+bay11.br2$jdat <- julian(bay11.br2$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
 #####
 # Break 3
@@ -1586,6 +1607,8 @@ bay11.br3 <- current %>%
   filter(time >= as.POSIXct("2017-05-22 09:55:00") & time <= as.POSIXct("2017-06-14 12:02:00")) %>%
   mutate(time_round = lubridate::round_date(time, "30 minutes")) 
 bay11.br3$time_round <- format(as.POSIXct(bay11.br3$time_round), format = "%H:%M:%S") 
+bay11.br3$jdat <- julian(bay11.br3$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
+
 
 # Calculate mean/median current based on rough time slots to nearest half hour
 rtime11.3 <- bay11.br3 %>% 
@@ -1607,6 +1630,9 @@ bay11.br3 <- bay11.br3 %>%
                        ifelse(is.na(current) & time_round=="13:30:00", "0.932", current)))
  
 
+lm11.3.mb <- lm(bay11.br3$current_der~bay11.br3$jdat)
+summary(lm11.3.mb)
+AICc(lm11.3.mb)
 
 ####################
 # STACK DATAFRAMES #
@@ -1685,7 +1711,7 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         summary(model.pnorm)
         summary(pool(model.pnorm))
         # Model results with completed dataset 
-        comp.pnorm <- complete(imp.pnorm)
+        bay2br1.comp.pnorm <- complete(imp.pnorm)
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
         AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              
 
@@ -1704,19 +1730,6 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
 
 
-
-
-###
-# Break 2: No missing values  
-###
-bay2.br2 <- current %>%
-  filter(bay=="B2") %>% 
-  filter(time >= as.POSIXct("2017-05-05 09:58:00") & time <= as.POSIXct("2017-05-28 09:14:00")) %>%
-  mutate(time_round = lubridate::round_date(time, "30 minutes")) %>% 
-  mutate(current_der = current)
-bay2.br2$time_round <- format(as.POSIXct(bay2.br2$time_round), format = "%H:%M:%S") 
-
-
 ###
 # Break 3: 2017-05-28 09:14:00 - 2017-06-14 12:25:00
 ###
@@ -1730,6 +1743,8 @@ bay2.br3$jdat <- julian(bay2.br3$time, origin = as.POSIXct('2017-04-03 09:29:00'
 
 # Linear model without NAs
 lm2.3 <- lm(bay2.br3$current~bay2.br3$jdat)
+summary(lm2.3)
+AICc(lm2.3)
 r1<-resid(lm2.3)
 plot(r1)
 hist(r1)
@@ -1769,7 +1784,7 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         summary(model.pnorm)
         summary(pool(model.pnorm))
         # Model results with completed dataset 
-        comp.pnorm <- complete(imp.pnorm)
+        bay2br3.comp.pnorm <- complete(imp.pnorm)
         summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
         AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))            
 
@@ -1788,41 +1803,342 @@ meth[c("ftime")]=""               # signify variables that don't need to be impu
         AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
 
 
+        
+        
+        
+        
+######################################
+# BAY 6 SUBSETS BASED ON BREAKPOINTS #
+######################################
 
+# Breakpoints: 
+  # Entry 143 corresponds to: 2017-04-26 06:13:00
+  # Entry 210 corresponds to: 2017-05-05 09:08:00     NO MISSING VALS
+  # Entry 278 corresponds to: 2017-05-16 10:50:00     NO MISSING VALS
+  # Entry 346 corresponds to: 2017-05-26 13:23:00     NO MISSING VALS
 
+####
+# Break 1: 2017-04-03 09:29:00 - 2017-04-26 06:13:00
+####
 
+bay6.br1 <- current %>%
+  filter(bay=="B6") %>% 
+  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-04-26 06:13:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay6.br1$time_round <- format(as.POSIXct(bay6.br1$time_round), format = "%H:%M:%S") 
+bay6.br1$jdat <- julian(bay6.br1$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
 
+# Linear model without NAs
+lm6.1 <- lm(bay6.br1$current~bay6.br1$jdat)
+summary(lm6.1)
+AICc(lm6.1)
+r1<-resid(lm2.1)
+plot(r1)
+hist(r1)
 
+<<<<<<< HEAD
 # I need completed datasets for 
   # Bay 2 Break 1 (pnorm) and Break 3 (pnorm)
   # Bay 6 Break 1 (pnorm)
   # Bay 11 Break 1 (pnorm) and Break 3 (median time block)
+=======
+# subset data to remove variables not needed for prediction 
+bay6.br1 <- bay6.br1 %>% 
+  select(-c(USID,date,set_start,bay,time, time_round))
+
+# MICE
+init <- mice(bay6.br1, maxit=0) 
+predM <- init$predictorMatrix     # Set predictor matrix
+predM[c("current")]=0             # signify variables not to be considered as predictors but will be imputed
+meth[c("ftime")]=""               # signify variables that don't need to be imputed but will be used as predictors 
+>>>>>>> 262cfcbe110fa7a4cd57d3b7218550dfbc17c4e6
+
+    # Impute: pmm
+    imp.pmm = mice(bay6.br1, method="pmm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pmm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pmm, ~current)                       
+        # Model results for imputed values only 
+        model.pmm <- with(imp.pmm, lm(current ~ jdat))
+        summary(model.pmm)
+        summary(pool(model.pmm))
+        # Model results with completed dataset 
+        comp.pmm <- complete(imp.pmm)
+        summary(lm(comp.pmm$current ~ comp.pmm$jdat))
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))              # AICc = -229.48
+
+    
+    #Impute: norm.predict
+    imp.pnorm = mice(bay6.br1, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pnorm, ~current)                       
+        # Model results for imputed values 
+        model.pnorm <- with(imp.pnorm, lm(current ~ jdat))
+        summary(model.pnorm)
+        summary(pool(model.pnorm))
+        # Model results with completed dataset 
+        bay6br1.comp.pnorm <- complete(imp.pnorm)
+        summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
+        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))              # AICc = -220.02
+
+
+    # Impute: Bayesian linear regression
+    imp.bays = mice(bay6.br1, method="norm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.bays, current ~ jdat, scales="free")
+    densityplot(imp.bays, ~current)
+        # Model results for imputed values 
+        model.bayes <- with(imp.bays, lm(current ~ jdat))
+        summary(model.bayes)
+        summary(pool(model.bayes))
+        # Model results with completed dataset
+        comp.pbayes <- complete(imp.bays)
+        summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
+        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              # AICc = -213.28
+
+        
 
 
 
 
 
+        
+#######################################
+# BAY 11 SUBSETS BASED ON BREAKPOINTS #
+#######################################
+
+# Breakpoints: 
+# Entry 209 corresponds to: 2017-05-05 08:22:00
+# Entry 317 corresponds to: 2017-05-22 09:55:00     # slightly bigger conf int
+
+####
+# Break 1: 2017-04-03 09:29:00 - 2017-05-05 08:22:00
+####
+
+bay11.br1 <- current %>%
+  filter(bay=="B11") %>% 
+  filter(time >= as.POSIXct("2017-04-03 09:29:00") & time <= as.POSIXct("2017-05-05 08:22:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay11.br1$time_round <- format(as.POSIXct(bay11.br1$time_round), format = "%H:%M:%S") 
+bay11.br1$jdat <- julian(bay11.br1$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
+
+# Linear model without NAs
+lm11.1 <- lm(bay11.br1$current~bay11.br1$jdat)
+summary(lm11.1)
+AICc(lm11.1)
+r1<-resid(lm11.1)
+plot(r1)
+hist(r1)
+
+# subset data to remove variables not needed for prediction 
+bay11.br1 <- bay11.br1 %>% 
+  select(-c(USID,date,set_start,bay,time, time_round))
+
+# MICE
+init <- mice(bay11.br1, maxit=0) 
+predM <- init$predictorMatrix     # Set predictor matrix
+predM[c("current")]=0             # signify variables not to be considered as predictors but will be imputed
+meth[c("ftime")]=""               # signify variables that don't need to be imputed but will be used as predictors 
+
+    # Impute: pmm
+    imp.pmm = mice(bay11.br1, method="pmm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pmm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pmm, ~current)                       
+        # Model results for imputed values only 
+        model.pmm <- with(imp.pmm, lm(current ~ jdat))
+        summary(model.pmm)
+        summary(pool(model.pmm))
+        # Model results with completed dataset 
+        comp.pmm <- complete(imp.pmm)
+        summary(lm(comp.pmm$current ~ comp.pmm$jdat))
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))             
+
+    
+    #Impute: norm.predict
+    imp.pnorm = mice(bay11.br1, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pnorm, ~current)                       
+        # Model results for imputed values 
+        model.pnorm <- with(imp.pnorm, lm(current ~ jdat))
+        summary(model.pnorm)
+        summary(pool(model.pnorm))
+        # Model results with completed dataset 
+        bay11br1.comp.pnorm <- complete(imp.pnorm)
+        summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
+        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))           
+
+
+    # Impute: Bayesian linear regression
+    imp.bays = mice(bay11.br1, method="norm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.bays, current ~ jdat, scales="free")
+    densityplot(imp.bays, ~current)
+        # Model results for imputed values 
+        model.bayes <- with(imp.bays, lm(current ~ jdat))
+        summary(model.bayes)
+        summary(pool(model.bayes))
+        # Model results with completed dataset
+        comp.pbayes <- complete(imp.bays)
+        summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
+        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
 
 
 
+####
+# Break 3: 2017-05-22 09:55:00 - 2017-06-14 09:50:00
+####
+bay11.br3 <- current %>%
+  filter(bay=="B11") %>% 
+  filter(time >= as.POSIXct("2017-05-22 09:55:00") & time <= as.POSIXct("2017-06-14 09:50:00")) %>%
+  mutate(time_round = lubridate::round_date(time, "30 minutes")) 
+bay11.br3$time_round <- format(as.POSIXct(bay11.br3$time_round), format = "%H:%M:%S") 
+bay11.br3$jdat <- julian(bay11.br3$time, origin = as.POSIXct('2017-04-03 09:29:00', tz = ''))
+
+# Linear model without NAs
+lm11.3 <- lm(bay11.br3$current~bay11.br3$jdat)
+summary(lm11.3)
+AICc(lm11.3)
+r1<-resid(lm11.3)
+plot(r1)
+hist(r1)
+
+# subset data to remove variables not needed for prediction 
+bay11.br3 <- bay11.br3 %>% 
+  select(-c(USID,date,set_start,bay,time, time_round))
+
+# MICE
+init <- mice(bay11.br3, maxit=0) 
+predM <- init$predictorMatrix     # Set predictor matrix
+predM[c("current")]=0             # signify variables not to be considered as predictors but will be imputed
+meth[c("ftime")]=""               # signify variables that don't need to be imputed but will be used as predictors 
+
+    # Impute: pmm
+    imp.pmm = mice(bay11.br3, method="pmm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pmm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pmm, ~current)                       
+        # Model results for imputed values only 
+        model.pmm <- with(imp.pmm, lm(current ~ jdat))
+        summary(model.pmm)
+        summary(pool(model.pmm))
+        # Model results with completed dataset 
+        comp.pmm <- complete(imp.pmm)
+        summary(lm(comp.pmm$current ~ comp.pmm$jdat))
+        AICc(lm(comp.pmm$current ~ comp.pmm$jdat))             
+        
+    
+    #Impute: norm.predict
+    imp.pnorm = mice(bay11.br3, method="norm.predict", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.pnorm, current ~ jdat, scales="free")       # red = imputed
+    densityplot(imp.pnorm, ~current)                       
+        # Model results for imputed values 
+        model.pnorm <- with(imp.pnorm, lm(current ~ jdat))
+        summary(model.pnorm)
+        summary(pool(model.pnorm))
+        # Model results with completed dataset 
+        comp.pnorm <- complete(imp.pnorm)
+        summary(lm(comp.pnorm$current ~ comp.pnorm$jdat))
+        AICc(lm(comp.pnorm$current ~ comp.pnorm$jdat))             
+
+
+    # Impute: Bayesian linear regression
+    imp.bays = mice(bay11.br3, method="norm", predictorMatrix=predM, m=5, seed=500)
+    xyplot(imp.bays, current ~ jdat, scales="free")
+    densityplot(imp.bays, ~current)
+        # Model results for imputed values 
+        model.bayes <- with(imp.bays, lm(current ~ jdat))
+        summary(model.bayes)
+        summary(pool(model.bayes))
+        # Model results with completed dataset
+        comp.pbayes <- complete(imp.bays)
+        summary(lm(comp.pbayes$current ~ comp.pbayes$jdat))
+        AICc(lm(comp.pbayes$current ~ comp.pbayes$jdat))              
+
+
+        
+        
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ REMAKE DATAFRAME         
+# I want dataframes for: 
+  # Bay 2 Break 1:   bay2br1.comp.pnorm
+  # Bay 2 Break 3:   bay2br3.comp.pnorm
+  # Bay 6 Break 1:   bay6br1.comp.pnorm
+  # Bay 11 Break 1:  bay11br1.comp.pnorm
+  # Bay 11 Break 3:  bay11.br3$current_der
+
+# Plus the others:
+  # Bay 2 Break 2:   bay2.br2
+  # Bay 6 Break 2:   bay6.br2
+  # Bay 6 Break 3:   bay6.br3
+  # Bay 6 Break 4:   bay6.br4
+  # Bay 6 Break 5:   bay6.br5
+  # Bay 11 Break 2:  bay11.br2
+
+
+###
+# FIRST re-bind imputed df with original dfs 
+###
+        
+# Bay 2 Break 1:   bay2br1.comp.pnorm
+colnames(bay2br1.comp.pnorm)[colnames(bay2br1.comp.pnorm)=="current"] <- "current_imp"
+bay2.1.imp <- cbind(bay2.br1, bay2br1.comp.pnorm)  
+bay2.1.imp$jdat = NULL
+        
+# Bay 2 Break 3:   bay2br3.comp.pnorm
+colnames(bay2br3.comp.pnorm)[colnames(bay2br3.comp.pnorm)=="current"] <- "current_imp"
+bay2.3.imp <- cbind(bay2.br3, bay2br3.comp.pnorm)  
+bay2.3.imp$jdat = NULL
+
+# Bay 6 Break 1:   bay6br1.comp.pnorm
+colnames(bay6br1.comp.pnorm)[colnames(bay6br1.comp.pnorm)=="current"] <- "current_imp"
+bay6.1.imp <- cbind(bay6.br1, bay6br1.comp.pnorm)  
+bay6.1.imp$jdat = NULL
+
+# Bay 11 Break 1:  bay11br1.comp.pnorm
+colnames(bay11br1.comp.pnorm)[colnames(bay11br1.comp.pnorm)=="current"] <- "current_imp"
+bay11.1.imp <- cbind(bay11.br1, bay11br1.comp.pnorm)  
+bay11.1.imp$jdat = NULL
+
+# Bay 11 Break 3:  bay11.br3$current_der
+colnames(bay11.br3)[colnames(bay11.br3)=="current_der"] <- "current_imp"
+bay11.3.imp <- bay11.br3 
+bay11.3.imp <- bay11.3.imp %>% 
+  select(USID, date, set_start, bay, current, time, time_round, current_imp, jdat)
 
 
 
+###
+# SECOND rename/create current columns so they can stack 
+###
+colnames(bay2.br2)[colnames(bay2.br2)=="current_der"] <- "current_imp"
+
+bay6.br2$current_imp <- paste(bay6.br2$current)
+bay6.br2 <- bay6.br2 %>% 
+  select(USID, date, set_start, bay, current, time, time_round, current_imp, jdat)
+
+bay6.br3$current_imp <- paste(bay6.br3$current)
+bay6.br3 <- bay6.br3 %>% 
+  select(USID, date, set_start, bay, current, time, time_round, current_imp, jdat)
+
+bay6.br4$current_imp <- paste(bay6.br4$current)
+bay6.br4 <- bay6.br4 %>% 
+  select(USID, date, set_start, bay, current, time, time_round, current_imp, jdat)
+
+bay6.br5$current_imp <- paste(bay6.br5$current)
+bay6.br5 <- bay6.br5 %>% 
+  select(USID, date, set_start, bay, current, time, time_round, current_imp, jdat)
+
+colnames(bay11.br2)[colnames(bay11.br2)=="current_der"] <- "current_imp"
+
+###
+# THIRD stack em!
+###
+
+names <- list(names(bay2br1.comp.pnorm))
+
+b2.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay2.1.imp, bay2.br2, bay2.3.imp))    
+b6.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay6.1.imp, bay6.br2, bay6.br3, bay6.br4, bay6.br5))
+b11.new.df <- Reduce(function(...) merge(..., all=TRUE), list(bay11.1.imp, bay11.br2, bay11.3.imp))
+
+new.df <- Reduce(function(...) merge(..., all=TRUE), list(b2.new.df, b6.new.df, b11.new.df))
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+write.csv(new.df, "interpolated_current.csv", row.names=F)
 
 
 
