@@ -1,6 +1,6 @@
 # chum-et-al
 Mission downstream juveniles - sockeye
-key data: 2017 environmental, tally, biosample. focus on sockeye
+> key data: 2017 environmental, tally, biosample. focus on sockeye
 
 KEY SCRIPTS:
 > 2017data_cleaning.R: cleaning up excel sheets, renaming columns, exporting into more manageable format and .csv
