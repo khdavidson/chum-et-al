@@ -14,7 +14,7 @@ KEY SCRIPTS:
 > mission-chilko_travel_time.R: side analysis looking at the travel time between chilko fence and mission
 
 
-IGORE: 
+IGNORE: 
 > appendix_fish_density.R: old analysis, not sure what is even in here
 > cloning_DFO.R: couldn't get github to clone and work on DFO computer so this was what worked to 'fix' it
 > decay_curve.R: playing around trying to fit a decay curve to vertical catch 
